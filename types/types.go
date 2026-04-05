@@ -66,8 +66,9 @@ type Model struct {
 	AssistantBlocks  []ContentBlock
 
 	// Debug & telemetry
-	Debug              bool
-	Yolo               bool
+	Debug             bool
+	Trace             bool
+	Yolo              bool
 	Summarizing        bool
 	PromptingForApiKey bool
 	TotalInputTokens   int

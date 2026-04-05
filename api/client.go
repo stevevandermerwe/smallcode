@@ -119,6 +119,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			if input == "/trace" || input == "/t" {
+				m.Model.Trace = !m.Model.Trace
+				state := "off"
+				if m.Model.Trace {
+					state = "on"
+				}
+				m.Model.Output = append(m.Model.Output, dimStyle.Render(fmt.Sprintf("   trace mode %s (logging to .smallcode/trace.log)", state)))
+				return m, nil
+			}
+
 			if input == "/yolo" || input == "/y" {
 				m.Model.Yolo = !m.Model.Yolo
 				config.YOLO = m.Model.Yolo
@@ -460,6 +470,9 @@ func (m *Model) CallAPI(toolResults []types.ContentBlock) tea.Cmd {
 		}
 
 		body, _ := json.Marshal(payload)
+		if m.Model.Trace {
+			m.logTraffic("SENT", body)
+		}
 		req, _ := http.NewRequest("POST", config.API_URL, bytes.NewBuffer(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+config.OPENROUTER_KEY)
@@ -474,6 +487,11 @@ func (m *Model) CallAPI(toolResults []types.ContentBlock) tea.Cmd {
 
 		var result map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&result)
+
+		if m.Model.Trace {
+			resBody, _ := json.Marshal(result)
+			m.logTraffic("RECEIVED", resBody)
+		}
 
 		if resp.StatusCode != 200 {
 			errMsg := fmt.Sprintf("API error %d", resp.StatusCode)
@@ -595,6 +613,25 @@ func (m *Model) executeTool(call types.ToolCall, approved bool) types.ToolExecRe
 	return types.ToolExecResult{ID: call.ID, Result: result}
 }
 
+// logTraffic writes raw API communication to .smallcode/trace.log
+func (m *Model) logTraffic(direction string, data []byte) {
+	os.MkdirAll(".smallcode", 0755)
+	f, err := os.OpenFile(".smallcode/trace.log", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	var pretty bytes.Buffer
+	json.Indent(&pretty, data, "", "  ")
+
+	timestamp := time.Now().Format("2006-01-02 15:04:05.000")
+	separator := strings.Repeat("-", 80)
+	entry := fmt.Sprintf("\n%s\n[%s] %s\n%s\n%s\n", separator, timestamp, direction, separator, pretty.String())
+
+	f.WriteString(entry)
+}
+
 // Styles
 
 var (
@@ -620,6 +657,7 @@ Commands:
   /h, /help         Show this help
   /init             Initialize project (.env, .smallcode, git init)
   /debug, /d       Toggle debug mode (shows API details, token counts, tool args)
+  /trace, /t       Toggle trace mode (logs ALL raw traffic to .smallcode/trace.log)
   /yolo, /y         Toggle YOLO mode (bypasses ALL security protections)
   /add <path>       Add a file's content to the context
   /map, /m          Add repository skeleton map to context
