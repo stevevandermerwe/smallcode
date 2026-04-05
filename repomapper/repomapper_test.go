@@ -1,21 +1,19 @@
 package repomapper
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
 func TestRepoMapper(t *testing.T) {
-	// Create a temporary directory for testing
 	tmpDir, err := os.MkdirTemp("", "repomapper-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer os.RemoveAll(tmpDir)
 
-	// Create some mock files
 	files := map[string]string{
 		"main.go": `package main
 
@@ -24,19 +22,14 @@ import "fmt"
 func main() {
 	s := &Store{}
 	s.Save([]byte("hello"))
-}
-`,
+}`,
 		"store.go": `package main
-
-import "fmt"
 
 type Store struct{}
 
 func (s *Store) Save(data []byte) error {
-	fmt.Println("Saving data")
 	return nil
-}
-`,
+}`,
 		"utils.py": `
 def helper():
     print("Helping")
@@ -44,6 +37,11 @@ def helper():
 class Utils:
     def __init__(self):
         pass
+`,
+		"main.py": `
+from utils import helper, Utils
+helper()
+u = Utils()
 `,
 	}
 
@@ -60,11 +58,26 @@ class Utils:
 		t.Fatalf("GenerateMap failed: %v", err)
 	}
 
-	fmt.Println("Generated Map:")
-	fmt.Println(output)
+	// Validate output contains all files
+	for name := range files {
+		if !strings.Contains(output, name) {
+			t.Errorf("Expected file %s in output, got:\n%s", name, output)
+		}
+	}
 
-	// Basic validation
-	if output == "" {
-		t.Errorf("Expected output, got empty string")
+	// Validate Go-specific parsing
+	if !strings.Contains(output, "func main") {
+		t.Errorf("Expected Go function 'main' in output")
+	}
+	if !strings.Contains(output, "func (s *Store) Save") {
+		t.Errorf("Expected Go method 'Save' in output")
+	}
+
+	// Validate Python-specific parsing
+	if !strings.Contains(output, "def helper") {
+		t.Errorf("Expected Python function 'helper' in output, got:\n%s", output)
+	}
+	if !strings.Contains(output, "class Utils") {
+		t.Errorf("Expected Python class 'Utils' in output")
 	}
 }
