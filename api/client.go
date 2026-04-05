@@ -74,6 +74,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			if input == "/debug" {
+				m.Model.Debug = !m.Model.Debug
+				state := "off"
+				if m.Model.Debug {
+					state = "on"
+				}
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sdebug mode %s%s", dimStyle, state, resetStyle))
+				return m, nil
+			}
+
 			m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s❯%s %s", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("❯"), resetStyle, input))
 			return m, m.SendMessage(input)
 		case tea.KeyBackspace:
@@ -98,10 +108,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Model.Waiting = false
 			return m, nil
 		}
+
+		// Accumulate token counts
+		m.Model.TotalInputTokens += msg.InputTokens
+		m.Model.TotalOutputTokens += msg.OutputTokens
+
+		if m.Model.Debug && (msg.InputTokens > 0 || msg.OutputTokens > 0) {
+			m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s[tokens] in=%d out=%d total_in=%d total_out=%d%s",
+				dimStyle, msg.InputTokens, msg.OutputTokens, m.Model.TotalInputTokens, m.Model.TotalOutputTokens, resetStyle))
+		}
+
 		m.Model.AssistantBlocks = msg.Content
 		m.Model.CollectedResults = []types.ContentBlock{}
 
-		// Extract tool calls
+		// Always append assistant message to history
+		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "assistant", Content: msg.Content})
+
+		// Extract tool calls and display output
 		var toolCalls []types.ToolCall
 		for _, block := range msg.Content {
 			if block.Type == "text" {
@@ -110,6 +133,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if block.Type == "tool_use" {
 				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s%s(%s)%s", toolStyle, block.Name, helpers.Truncate(fmt.Sprintf("%v", block.Input), 50), resetStyle))
 				toolCalls = append(toolCalls, types.ToolCall{ID: block.ID, Name: block.Name, Args: block.Input})
+				if m.Model.Debug {
+					m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s[debug] tool call: %s args=%v%s", dimStyle, block.Name, block.Input, resetStyle))
+				}
 			}
 		}
 
@@ -127,7 +153,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// View will render the confirmation prompt
 
 	case types.ToolExecResult:
-		// Tool was executed, add result to collected results
 		m.Model.CollectedResults = append(m.Model.CollectedResults, types.ContentBlock{
 			Type:   "tool_result",
 			ToolID: msg.ID,
@@ -135,33 +160,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 		m.Model.PendingConfirm = nil
 
-		// Continue processing remaining tools
+		preview := helpers.Truncate(strings.Split(msg.Result, "\n")[0], 60)
+		m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s⎿  %s%s", dimStyle, preview, resetStyle))
+		if m.Model.Debug {
+			m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s[debug] tool result id=%s: %s%s", dimStyle, msg.ID, helpers.Truncate(msg.Result, 200), resetStyle))
+		}
+
 		if len(m.Model.ToolQueue) > 0 {
 			return m, m.processNextTool()
 		}
 
-		// All tools processed, send results back to API
-		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "assistant", Content: m.Model.AssistantBlocks})
+		// All tools processed — assistant message already in history; send tool results back
 		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: m.Model.CollectedResults})
-		return m, m.CallAPI(m.Model.CollectedResults)
+		return m, m.CallAPI(nil)
 
 	case types.ToolBlockedMsg:
-		// Tool was blocked, add error result
 		m.Model.CollectedResults = append(m.Model.CollectedResults, types.ContentBlock{
 			Type:   "tool_result",
 			ToolID: msg.Call.ID,
 			Result: fmt.Sprintf("error: %s", msg.Reason),
 		})
+		m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s⎿  blocked: %s%s", errorStyle, msg.Reason, resetStyle))
 
-		// Continue processing remaining tools
 		if len(m.Model.ToolQueue) > 0 {
 			return m, m.processNextTool()
 		}
 
-		// All tools processed, send results back to API
-		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "assistant", Content: m.Model.AssistantBlocks})
 		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: m.Model.CollectedResults})
-		return m, m.CallAPI(m.Model.CollectedResults)
+		return m, m.CallAPI(nil)
 
 	case types.ToolOutput:
 		m.Model.ToolResults = append(m.Model.ToolResults, types.ToolResult{Name: msg.Name, Result: msg.Result, Error: msg.Err})
@@ -180,13 +206,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	var lines []string
 
-	header := fmt.Sprintf("%s smallcode %s| %s (%s)%s | %s",
+	tokenInfo := ""
+	if m.Model.TotalInputTokens > 0 || m.Model.TotalOutputTokens > 0 {
+		tokenInfo = fmt.Sprintf(" | %stokens ↑%d ↓%d%s", dimStyle, m.Model.TotalInputTokens, m.Model.TotalOutputTokens, resetStyle)
+	}
+	debugInfo := ""
+	if m.Model.Debug {
+		debugInfo = fmt.Sprintf(" | %s[debug]%s", lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("[debug]"), resetStyle)
+	}
+	header := fmt.Sprintf("%s smallcode %s| %s (%s)%s | %s%s%s",
 		lipgloss.NewStyle().Bold(true).Render("smallcode"),
 		resetStyle,
 		dimStyle,
 		m.Model.ModelName,
 		resetStyle,
 		m.Model.Provider,
+		tokenInfo,
+		debugInfo,
 	)
 	lines = append(lines, header, "")
 
@@ -301,25 +337,53 @@ func (m *Model) CallAPI(toolResults []types.ContentBlock) tea.Cmd {
 		var result map[string]interface{}
 		json.NewDecoder(resp.Body).Decode(&result)
 
+		if resp.StatusCode != 200 {
+			errMsg := fmt.Sprintf("API error %d", resp.StatusCode)
+			if errObj, ok := result["error"].(map[string]interface{}); ok {
+				if msg, ok := errObj["message"].(string); ok {
+					errMsg = fmt.Sprintf("API error %d: %s", resp.StatusCode, msg)
+				}
+			}
+			return types.APIResponse{Err: fmt.Errorf("%s", errMsg)}
+		}
+
+		// Extract token usage
+		inputTokens, outputTokens := 0, 0
+		if usage, ok := result["usage"].(map[string]interface{}); ok {
+			if v, ok := usage["input_tokens"].(float64); ok {
+				inputTokens = int(v)
+			}
+			if v, ok := usage["output_tokens"].(float64); ok {
+				outputTokens = int(v)
+			}
+		}
+
 		contentBlocks, _ := result["content"].([]interface{})
 		var assistantBlocks []types.ContentBlock
 
 		for _, b := range contentBlocks {
-			block := b.(map[string]interface{})
-			blockType := block["type"].(string)
+			block, ok := b.(map[string]interface{})
+			if !ok {
+				continue
+			}
+			blockType, _ := block["type"].(string)
 
 			if blockType == "text" {
-				assistantBlocks = append(assistantBlocks, types.ContentBlock{Type: "text", Text: block["text"].(string)})
+				text, _ := block["text"].(string)
+				assistantBlocks = append(assistantBlocks, types.ContentBlock{Type: "text", Text: text})
 			}
 			if blockType == "tool_use" {
-				id := block["id"].(string)
-				name := block["name"].(string)
-				args := block["input"].(map[string]interface{})
+				id, _ := block["id"].(string)
+				name, _ := block["name"].(string)
+				args, _ := block["input"].(map[string]interface{})
+				if args == nil {
+					args = map[string]interface{}{}
+				}
 				assistantBlocks = append(assistantBlocks, types.ContentBlock{Type: "tool_use", ID: id, Name: name, Input: args})
 			}
 		}
 
-		return types.APIResponse{Content: assistantBlocks, ToolResults: []types.ContentBlock{}}
+		return types.APIResponse{Content: assistantBlocks, InputTokens: inputTokens, OutputTokens: outputTokens}
 	}
 }
 
@@ -402,6 +466,7 @@ const helpText = `smallcode - Commands & Tips
 
 Commands:
   /h          Show this help
+  /debug      Toggle debug mode (shows API details, token counts, tool args)
   /c          Clear conversation
   /q, exit    Quit
 

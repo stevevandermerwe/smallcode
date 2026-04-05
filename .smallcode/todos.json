@@ -1,5 +1,64 @@
 {
   "version": 1,
-  "updated": "2026-04-05T13:17:00+02:00",
-  "todos": []
+  "updated": "2026-04-05T18:18:17+02:00",
+  "todos": [
+    {
+      "id": "t1",
+      "title": "Create isolation package with cgroups Manager",
+      "status": "pending",
+      "priority": 1,
+      "sources": [
+        {
+          "type": "file",
+          "ref": "tools/tools.go"
+        },
+        {
+          "type": "file",
+          "ref": "security/policy.go"
+        }
+      ],
+      "created": "2026-04-05T18:17:49+02:00"
+    },
+    {
+      "id": "t2",
+      "title": "Add resource limits (CPU, memory, PID) to cgroups config",
+      "status": "pending",
+      "priority": 1,
+      "blocked_by": [
+        "cgroups-1"
+      ],
+      "created": "2026-04-05T18:18:17+02:00"
+    },
+    {
+      "id": "t3",
+      "title": "Implement container/sandbox runner that uses cgroups Manager",
+      "status": "pending",
+      "priority": 1,
+      "blocked_by": [
+        "cgroups-1"
+      ],
+      "created": "2026-04-05T18:18:17+02:00"
+    },
+    {
+      "id": "t4",
+      "title": "Integrate isolation into Bash tool execution",
+      "status": "pending",
+      "priority": 1,
+      "blocked_by": [
+        "cgroups-2",
+        "cgroups-3"
+      ],
+      "created": "2026-04-05T18:18:17+02:00"
+    },
+    {
+      "id": "t5",
+      "title": "Add config options for isolation settings (enable/disable, limits)",
+      "status": "pending",
+      "priority": 2,
+      "blocked_by": [
+        "cgroups-1"
+      ],
+      "created": "2026-04-05T18:18:17+02:00"
+    }
+  ]
 }

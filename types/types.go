@@ -29,9 +29,11 @@ type ToolResult struct {
 // API Messages
 
 type APIResponse struct {
-	Content     []ContentBlock
-	ToolResults []ContentBlock
-	Err         error
+	Content      []ContentBlock
+	ToolResults  []ContentBlock
+	InputTokens  int
+	OutputTokens int
+	Err          error
 }
 
 type ToolOutput struct {
@@ -62,6 +64,11 @@ type Model struct {
 	ToolQueue        []ToolCall
 	CollectedResults []ContentBlock
 	AssistantBlocks  []ContentBlock
+
+	// Debug & telemetry
+	Debug             bool
+	TotalInputTokens  int
+	TotalOutputTokens int
 }
 
 // Memory Types
