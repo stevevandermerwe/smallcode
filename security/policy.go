@@ -1,7 +1,9 @@
 package security
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -17,6 +19,42 @@ const (
 type PolicyResult struct {
 	Decision Decision
 	Reason   string
+}
+
+var alwaysAllowed = make(map[string]bool)
+
+func LoadPermissions() {
+	path := ".smallcode/permissions.json"
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var perms struct {
+		AlwaysAllow []string `json:"always_allow"`
+	}
+	if err := json.Unmarshal(data, &perms); err == nil {
+		for _, tool := range perms.AlwaysAllow {
+			alwaysAllowed[tool] = true
+		}
+	}
+}
+
+func SavePermissions() {
+	os.MkdirAll(".smallcode", 0755)
+	path := ".smallcode/permissions.json"
+	var perms struct {
+		AlwaysAllow []string `json:"always_allow"`
+	}
+	for tool := range alwaysAllowed {
+		perms.AlwaysAllow = append(perms.AlwaysAllow, tool)
+	}
+	data, _ := json.MarshalIndent(perms, "", "  ")
+	os.WriteFile(path, data, 0644)
+}
+
+func AllowAlways(toolName string) {
+	alwaysAllowed[toolName] = true
+	SavePermissions()
 }
 
 var bashDenyList = []string{
@@ -47,24 +85,30 @@ var bashDenyList = []string{
 }
 
 func Check(toolName string, args map[string]interface{}, cwd string) PolicyResult {
+	var res PolicyResult
+
 	switch toolName {
 	case "bash":
-		return checkBash(args)
+		res = checkBash(args)
 	case "read":
-		return checkRead(args, cwd)
+		res = checkRead(args, cwd)
 	case "write":
-		return checkWrite(args, cwd)
+		res = checkWrite(args, cwd)
 	case "edit":
-		return checkEdit(args, cwd)
+		res = checkEdit(args, cwd)
 	case "glob":
-		return checkGlob(args, cwd)
+		res = checkGlob(args, cwd)
 	case "grep":
-		return checkGrep(args, cwd)
-	case "remember", "todo":
-		return PolicyResult{Decision: Allow, Reason: ""}
+		res = checkGrep(args, cwd)
 	default:
-		return PolicyResult{Decision: Allow, Reason: ""}
+		res = PolicyResult{Decision: Allow, Reason: ""}
 	}
+
+	if res.Decision == Confirm && alwaysAllowed[toolName] {
+		return PolicyResult{Decision: Allow, Reason: "always allow"}
+	}
+
+	return res
 }
 
 func checkBash(args map[string]interface{}) PolicyResult {

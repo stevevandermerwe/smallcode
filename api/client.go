@@ -52,6 +52,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, func() tea.Msg { return m.executeTool(call, true) }
 					} else if ch == "n" || ch == "N" {
 						return m, func() tea.Msg { return m.executeTool(call, false) }
+					} else if ch == "a" || ch == "A" {
+						security.AllowAlways(call.Name)
+						security.Log("ALWAYS", call.Name, call.Args, "granted permanent permission")
+						return m, func() tea.Msg { return m.executeTool(call, true) }
 					}
 				}
 			}
@@ -309,7 +313,7 @@ func (m Model) View() string {
 	if m.Model.PendingConfirm != nil {
 		confirmLine := fmt.Sprintf("%s⚠ %s: %s%s", errorStyle, m.Model.PendingConfirm.Call.Name, m.Model.PendingConfirm.Reason, resetStyle)
 		lines = append(lines, confirmLine)
-		promptLine := fmt.Sprintf("  %s[y] approve  [n] deny%s", dimStyle, resetStyle)
+		promptLine := fmt.Sprintf("  %s[y] approve  [n] deny  [a] always allow%s", dimStyle.Render(""), resetStyle.Render(""))
 		lines = append(lines, promptLine)
 	} else {
 		promptSym := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("❯")
@@ -627,6 +631,7 @@ func LoadMemoryContext() string {
 
 func NewModel() *Model {
 	config.Init()
+	security.LoadPermissions()
 	m := &Model{
 		Model: &types.Model{
 			Messages:  []types.Message{},
