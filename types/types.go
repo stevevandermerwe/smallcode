@@ -69,6 +69,7 @@ type Model struct {
 	Debug             bool
 	Yolo              bool
 	Summarizing       bool
+	PromptingForApiKey bool
 	TotalInputTokens  int
 	TotalOutputTokens int
 }

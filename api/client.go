@@ -74,6 +74,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			input := m.Model.Input
 			m.Model.Input = ""
 
+			if m.Model.PromptingForApiKey {
+				key := strings.TrimSpace(input)
+				if key != "" {
+					// Read existing .env and replace key
+					data, _ := os.ReadFile(".env")
+					lines := strings.Split(string(data), "\n")
+					keyUpdated := false
+					for i, line := range lines {
+						if strings.HasPrefix(line, "OPENROUTER_API_KEY=") {
+							lines[i] = "OPENROUTER_API_KEY=" + key
+							keyUpdated = true
+						}
+					}
+					if !keyUpdated {
+						lines = append(lines, "OPENROUTER_API_KEY="+key)
+					}
+					os.WriteFile(".env", []byte(strings.Join(lines, "\n")), 0644)
+					config.Init() // Re-initialize with the new key and model
+					m.Model.Provider = config.Provider()
+					m.Model.ModelName = config.MODEL
+					m.Model.Output = append(m.Model.Output, dimStyle.Render("   ✔ OpenRouter API Key saved and configuration updated"))
+				} else {
+					m.Model.Output = append(m.Model.Output, dimStyle.Render("   ℹ Skipping API Key addition (none provided)"))
+				}
+				m.Model.PromptingForApiKey = false
+				m.Model.Output = append(m.Model.Output, dimStyle.Render("   Initialization complete! Enjoy SmallCode."))
+				return m, nil
+			}
+
 			if input == "/h" {
 				m.Model.Output = append(m.Model.Output, helpText)
 				return m, nil
@@ -120,7 +149,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				path := strings.TrimSpace(input[5:])
 				data, err := os.ReadFile(path)
 				if err != nil {
-					m.Model.Output = append(m.Model.Output, fmt.Sprintf("   %sError reading file: %v", errorStyle.Render("✘"), err))
+					m.Model.Output = append(m.Model.Output, fmt.Sprintf("   %s Error reading file: %v", errorStyle.Render("✘"), err))
 					return m, nil
 				}
 				content := fmt.Sprintf("File: %s\n\n```\n%s\n```", path, string(data))
@@ -135,6 +164,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				for _, msg := range msgs {
 					m.Model.Output = append(m.Model.Output, dimStyle.Render("   "+msg))
 				}
+				m.Model.PromptingForApiKey = true
+				m.Model.Output = append(m.Model.Output, lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true).Render("   Enter your OpenRouter API Key:"))
 				return m, nil
 			}
 
@@ -408,12 +439,9 @@ func (m *Model) CallAPI(toolResults []types.ContentBlock) tea.Cmd {
 		body, _ := json.Marshal(payload)
 		req, _ := http.NewRequest("POST", config.API_URL, bytes.NewBuffer(body))
 		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("anthropic-version", "2023-06-01")
-		if config.OPENROUTER_KEY != "" {
-			req.Header.Set("Authorization", "Bearer "+config.OPENROUTER_KEY)
-		} else {
-			req.Header.Set("x-api-key", os.Getenv("ANTHROPIC_API_KEY"))
-		}
+		req.Header.Set("Authorization", "Bearer "+config.OPENROUTER_KEY)
+		req.Header.Set("HTTP-Referer", "SmallCode")
+		req.Header.Set("X-Title", "SmallCode")
 
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
@@ -657,11 +685,11 @@ func NewModel() *Model {
 func initProject() []string {
 	var msgs []string
 
-	// 1. .env
+	// 1. .env (template)
 	if _, err := os.Stat(".env"); os.IsNotExist(err) {
-		content := "OPENROUTER_API_KEY=sk-or-v1-...\nMODEL=anthropic/claude-3.5-sonnet\nMAX_TOKENS=16384\n"
+		content := "OPENROUTER_API_KEY=\nMODEL=minimax/minimax-m2.5\nMAX_TOKENS=16384\n"
 		if err := os.WriteFile(".env", []byte(content), 0644); err == nil {
-			msgs = append(msgs, "✔ Created .env")
+			msgs = append(msgs, "✔ Created .env template")
 		}
 	} else {
 		msgs = append(msgs, "ℹ .env already exists")
@@ -671,6 +699,7 @@ func initProject() []string {
 	os.MkdirAll(".smallcode/skills", 0755)
 	
 	files := map[string]string{
+		".gitignore":             ".env\ndist/\n",
 		".smallcode/ignore":      ".git\nnode_modules\ndist\n.smallcode\n",
 		".smallcode/memory.json": "{\n  \"version\": 1,\n  \"entries\": []\n}",
 		".smallcode/todos.json":  "{\n  \"version\": 1,\n  \"todos\": []\n}",
@@ -697,8 +726,6 @@ func initProject() []string {
 	} else {
 		msgs = append(msgs, "ℹ Git repository already exists")
 	}
-
-	msgs = append(msgs, "", "👉 Please edit the .env file to add your API keys and model configuration.")
 
 	return msgs
 }
