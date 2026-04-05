@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/exec"
 	"regexp"
 	"strings"
 	"time"
@@ -80,7 +81,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.Model.Debug {
 					state = "on"
 				}
-				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sdebug mode %s%s", dimStyle, state, resetStyle))
+				m.Model.Output = append(m.Model.Output, dimStyle.Render(fmt.Sprintf("   debug mode %s", state)))
 				return m, nil
 			}
 
@@ -91,19 +92,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if m.Model.Yolo {
 					state = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true).Render("ON")
 				}
-				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sYOLO mode %s%s", dimStyle, state, resetStyle))
+				m.Model.Output = append(m.Model.Output, dimStyle.Render(fmt.Sprintf("   YOLO mode %s", state)))
 				return m, nil
 			}
 
 			if input == "/c" {
 				m.Model.Messages = []types.Message{}
-				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sConversation cleared.%s", dimStyle, resetStyle))
+				m.Model.Output = append(m.Model.Output, dimStyle.Render("   Conversation cleared."))
 				return m, nil
 			}
 
 			if input == "/s" {
-				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s❯%s %s", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("❯"), resetStyle, input))
-				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sSummarizing conversation and clearing history...%s", dimStyle, resetStyle))
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s %s", userPrefix, input))
+				m.Model.Output = append(m.Model.Output, dimStyle.Render("   Summarizing conversation..."))
 				prompt := "Please summarize our conversation so far. Highlight key decisions and current state. If there are important facts or pending tasks, use the `remember` or `todo` tools to persist them before concluding."
 				m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: prompt})
 				m.Model.Summarizing = true
@@ -115,16 +116,25 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				path := strings.TrimSpace(input[5:])
 				data, err := os.ReadFile(path)
 				if err != nil {
-					m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sError reading file: %v%s", errorStyle, err, resetStyle))
+					m.Model.Output = append(m.Model.Output, fmt.Sprintf("   %sError reading file: %v", errorStyle.Render("✘"), err))
 					return m, nil
 				}
 				content := fmt.Sprintf("File: %s\n\n```\n%s\n```", path, string(data))
 				m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: content})
-				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sAdded %s to context.%s", dimStyle, path, resetStyle))
+				m.Model.Output = append(m.Model.Output, dimStyle.Render(fmt.Sprintf("   Added %s to context.", path)))
 				return m, nil
 			}
 
-			m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s❯%s %s", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("❯"), resetStyle, input))
+			if input == "/init" {
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s %s", userPrefix, input))
+				msgs := initProject()
+				for _, msg := range msgs {
+					m.Model.Output = append(m.Model.Output, dimStyle.Render("   "+msg))
+				}
+				return m, nil
+			}
+
+			m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s %s", userPrefix, input))
 			return m, m.SendMessage(input)
 		case tea.KeyBackspace:
 			if len(m.Model.Input) > 0 {
@@ -174,14 +184,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		var toolCalls []types.ToolCall
 		for _, block := range msg.Content {
 			if block.Type == "text" {
-				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s%s%s", assistantStyle, block.Text, resetStyle))
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s %s", assistantPrefix, block.Text))
 			}
 			if block.Type == "tool_use" {
-				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s%s(%s)%s", toolStyle, block.Name, helpers.Truncate(fmt.Sprintf("%v", block.Input), 50), resetStyle))
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("   %s %s(%s)", toolStyle.Render("⚒"), block.Name, dimStyle.Render(helpers.Truncate(fmt.Sprintf("%v", block.Input), 50))))
 				toolCalls = append(toolCalls, types.ToolCall{ID: block.ID, Name: block.Name, Args: block.Input})
-				if m.Model.Debug {
-					m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s[debug] tool call: %s args=%v%s", dimStyle, block.Name, block.Input, resetStyle))
-				}
 			}
 		}
 
@@ -206,11 +213,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		})
 		m.Model.PendingConfirm = nil
 
-		preview := helpers.Truncate(strings.Split(msg.Result, "\n")[0], 60)
-		m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s⎿  %s%s", dimStyle, preview, resetStyle))
-		if m.Model.Debug {
-			m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s[debug] tool result id=%s: %s%s", dimStyle, msg.ID, helpers.Truncate(msg.Result, 200), resetStyle))
-		}
+		preview := dimStyle.Render(helpers.Truncate(strings.Split(msg.Result, "\n")[0], 60))
+		m.Model.Output = append(m.Model.Output, fmt.Sprintf("     %s %s", dimStyle.Render("↳"), preview))
 
 		if len(m.Model.ToolQueue) > 0 {
 			return m, m.processNextTool()
@@ -226,7 +230,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			ToolID: msg.Call.ID,
 			Result: fmt.Sprintf("error: %s", msg.Reason),
 		})
-		m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s⎿  blocked: %s%s", errorStyle, msg.Reason, resetStyle))
+		m.Model.Output = append(m.Model.Output, fmt.Sprintf("     %s %s", errorStyle.Render("✕"), dimStyle.Render(msg.Reason)))
 
 		if len(m.Model.ToolQueue) > 0 {
 			return m, m.processNextTool()
@@ -252,31 +256,40 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	var lines []string
 
+	// 1. Header
 	tokenInfo := ""
 	if m.Model.TotalInputTokens > 0 || m.Model.TotalOutputTokens > 0 {
-		tokenInfo = fmt.Sprintf(" | %stokens ↑%d ↓%d%s", dimStyle, m.Model.TotalInputTokens, m.Model.TotalOutputTokens, resetStyle)
+		color := "240"
+		if config.MAX_TOKENS > 0 && m.Model.TotalInputTokens > int(float64(config.MAX_TOKENS)*0.8) {
+			color = "3" // yellow warning
+		}
+		tokenInfo = fmt.Sprintf(" | %stokens ↑%d ↓%d%s", lipgloss.NewStyle().Foreground(lipgloss.Color(color)), m.Model.TotalInputTokens, m.Model.TotalOutputTokens, resetStyle)
 	}
+
 	debugInfo := ""
 	if m.Model.Debug {
 		debugInfo = fmt.Sprintf(" | %s[debug]%s", lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("[debug]"), resetStyle)
 	}
+
 	yoloInfo := ""
 	if m.Model.Yolo {
 		yoloInfo = fmt.Sprintf(" | %s[YOLO]%s", lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true).Render("[YOLO]"), resetStyle)
 	}
-	header := fmt.Sprintf("%s smallcode %s| %s (%s)%s | %s%s%s%s",
-		lipgloss.NewStyle().Bold(true).Render("smallcode"),
-		resetStyle,
-		dimStyle,
-		m.Model.ModelName,
-		resetStyle,
-		m.Model.Provider,
+
+	headerText := fmt.Sprintf("%s %s (%s)%s%s%s | %s",
+		lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("smallcode"),
+		dimStyle.Render(m.Model.ModelName),
+		dimStyle.Render(m.Model.Provider),
 		tokenInfo,
 		debugInfo,
 		yoloInfo,
+		dimStyle.Render("/h for help"),
 	)
+
+	header := headerStyle.Render(headerText)
 	lines = append(lines, header, "")
 
+	// 2. Body (Output)
 	visibleLines := m.Model.Height - 10
 	if visibleLines < 0 {
 		visibleLines = 20
@@ -292,25 +305,28 @@ func (m Model) View() string {
 		lines = append(lines, "")
 	}
 
-	// Render confirmation prompt if pending
+	// 3. Footer / Input Area
 	if m.Model.PendingConfirm != nil {
 		confirmLine := fmt.Sprintf("%s⚠ %s: %s%s", errorStyle, m.Model.PendingConfirm.Call.Name, m.Model.PendingConfirm.Reason, resetStyle)
 		lines = append(lines, confirmLine)
-		promptLine := fmt.Sprintf("  [y] approve  [n] deny")
+		promptLine := fmt.Sprintf("  %s[y] approve  [n] deny%s", dimStyle, resetStyle)
 		lines = append(lines, promptLine)
 	} else {
-		prompt := fmt.Sprintf("%s%s❯%s ", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("❯"), resetStyle, dimStyle)
+		promptSym := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("❯")
 		if m.Model.Waiting {
-			prompt = fmt.Sprintf("%s%s⏳%s ", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("⏳"), resetStyle, dimStyle)
+			promptSym = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("13")).Render("⏳")
 		}
-		inputLine := prompt + m.Model.Input
-		if m.Model.Input == "" {
-			inputLine += dimStyle.Render("...") + resetStyle.Render("")
+
+		inputContent := m.Model.Input
+		if inputContent == "" && !m.Model.Waiting {
+			inputContent = dimStyle.Render("Type a message...")
 		}
+
+		inputLine := fmt.Sprintf("%s %s", promptSym, inputContent)
 		lines = append(lines, inputLine)
 	}
 
-	return lipgloss.NewStyle().Margin(1).Render(strings.Join(lines, "\n"))
+	return lipgloss.NewStyle().Padding(1, 2).Render(strings.Join(lines, "\n"))
 }
 
 // SendMessage adds user message and calls API
@@ -324,8 +340,9 @@ func (m *Model) SendMessage(input string) tea.Cmd {
 		skillName := matches[1]
 		if content, err := skills.Load(skillName); err == nil {
 			skillContent = fmt.Sprintf("[Skill: %s]\n\n%s\n\n", skillName, content)
+			m.Model.Output = append(m.Model.Output, dimStyle.Render(fmt.Sprintf("   Applied skill: %s", skillName)))
 		} else {
-			m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sSkill not found: %s%s", errorStyle, skillName, resetStyle))
+			m.Model.Output = append(m.Model.Output, fmt.Sprintf("   %s Skill not found: %s", errorStyle.Render("✘"), skillName))
 			m.Model.Waiting = false
 			return nil
 		}
@@ -522,17 +539,27 @@ func (m *Model) executeTool(call types.ToolCall, approved bool) types.ToolExecRe
 // Styles
 
 var (
+	headerStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.Color("15")).
+			Background(lipgloss.Color("235")).
+			Padding(0, 1).
+			Bold(true).
+			MarginBottom(1)
+
 	resetStyle     = lipgloss.NewStyle()
-	dimStyle       = lipgloss.NewStyle().Faint(true)
-	errorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Bold(true)
+	dimStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	errorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
 	assistantStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
-	toolStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Bold(true)
+	userPrefix     = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true).Render("❯")
+	assistantPrefix = lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true).Render("◇")
+	toolStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
 )
 
 const helpText = `smallcode - Commands & Tips
 
 Commands:
   /h          Show this help
+  /init       Initialize project (.env, .smallcode, git init)
   /debug      Toggle debug mode (shows API details, token counts, tool args)
   /yolo       Toggle YOLO mode (bypasses ALL security protections)
   /add <path> Add a file's content to the context
@@ -600,7 +627,7 @@ func LoadMemoryContext() string {
 
 func NewModel() *Model {
 	config.Init()
-	return &Model{
+	m := &Model{
 		Model: &types.Model{
 			Messages:  []types.Message{},
 			Output:    []string{},
@@ -609,4 +636,60 @@ func NewModel() *Model {
 			StartTime: time.Now(),
 		},
 	}
+
+	// Check if project is initialized
+	if _, err := os.Stat(".smallcode"); os.IsNotExist(err) {
+		m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sProject not initialized. Type %s/init%s to get started.%s", errorStyle, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render(""), "", resetStyle))
+	}
+
+	return m
+}
+
+func initProject() []string {
+	var msgs []string
+
+	// 1. .env
+	if _, err := os.Stat(".env"); os.IsNotExist(err) {
+		content := "OPENROUTER_API_KEY=sk-or-v1-...\nMODEL=anthropic/claude-3.5-sonnet\nMAX_TOKENS=16384\n"
+		if err := os.WriteFile(".env", []byte(content), 0644); err == nil {
+			msgs = append(msgs, "✔ Created .env")
+		}
+	} else {
+		msgs = append(msgs, "ℹ .env already exists")
+	}
+
+	// 2. .smallcode directory and basics
+	os.MkdirAll(".smallcode/skills", 0755)
+	
+	files := map[string]string{
+		".smallcode/ignore":      ".git\nnode_modules\ndist\n.smallcode\n",
+		".smallcode/memory.json": "{\n  \"version\": 1,\n  \"entries\": []\n}",
+		".smallcode/todos.json":  "{\n  \"version\": 1,\n  \"todos\": []\n}",
+		".smallcode/skills/example.md": "# Example Skill\n\nYou are an example skill that demonstrates the skills system.\n\n## Purpose\nSkills allow you to inject specialized instructions into your conversation on-demand.\n",
+		".smallcode/skills/context.md": "# Context Audit Skill\n\nYou are an expert context manager. Your task is to audit the current project context (Memory and Todos) to ensure they are lean, relevant, and accurate.\n\n## Objectives\n1. **Audit Memory:** Use the `remember` tool with `action=forget` to remove stale or redundant facts. Use `action=update` to consolidate related facts into single, concise entries.\n2. **Audit Todos:** Use the `todo` tool with `action=list` first to see all tasks. Then:\n    - `action=close` tasks that are finished but still open.\n    - `action=remove` duplicate tasks.\n    - `action=update` tasks to add better priority or clear up blocking dependencies.\n3. **Consolidate:** If a finished task resulted in a lasting project fact, ensure that fact is in `memory` before closing the `todo`.\n\n## Goal\nKeep the system prompt under control so that it doesn't waste tokens. Be aggressive but careful not to lose critical project information.\n",
+	}
+
+	for path, content := range files {
+		if _, err := os.Stat(path); os.IsNotExist(err) {
+			if err := os.WriteFile(path, []byte(content), 0644); err == nil {
+				msgs = append(msgs, fmt.Sprintf("✔ Created %s", path))
+			}
+		}
+	}
+
+	// 3. git init
+	if _, err := os.Stat(".git"); os.IsNotExist(err) {
+		cmd := exec.Command("git", "init")
+		if err := cmd.Run(); err == nil {
+			msgs = append(msgs, "✔ Initialized git repository")
+		} else {
+			msgs = append(msgs, fmt.Sprintf("✘ Failed to initialize git: %v", err))
+		}
+	} else {
+		msgs = append(msgs, "ℹ Git repository already exists")
+	}
+
+	msgs = append(msgs, "", "👉 Please edit the .env file to add your API keys and model configuration.")
+
+	return msgs
 }

@@ -4,38 +4,40 @@ Minimal Claude Code alternative powered by Bubbletea TUI.
 
 ## Features
 
-- Full agentic loop with tool use
-- Tools: `read`, `write`, `edit`, `glob`, `grep`, `bash`
-- Conversation history
-- Rich terminal UI with lipgloss styling
-- Reads config from `~/.env`
+- **Full Agentic Loop:** Seamless tool-use integration.
+- **Secure by Default:** Advanced security layer with Allow/Block/Confirm logic for destructive operations and shell commands.
+- **YOLO Mode:** Optional unrestricted mode for power users.
+- **Smart Context Management:** Includes auto-pruning, conversation summarizing (`/s`), and token warning indicators.
+- **Persistent Memory:** Track project facts and tasks across sessions using `remember` and `todo` tools.
+- **Skills System:** Specialized instruction sets (e.g., `@context`, `@example`) invoked on-demand.
+- **Automatic Exclusions:** Search tools automatically ignore `.git`, `node_modules`, and build artifacts.
+- **Rich TUI:** Modern terminal interface with real-time token tracking and lipgloss styling.
+
+## Installation & Setup
+
+### 1. Build from Source
+```bash
+make build
+```
+
+### 2. Initialize Project
+Run the following command inside your project directory to set up the necessary structure:
+```bash
+./dist/smallcode
+# Inside the TUI, type:
+/init
+```
+This will create a `.env` template, initialize the `.smallcode/` directory, and run `git init` if needed.
 
 ## Configuration
 
-Configuration is loaded from `~/.env`:
+Configuration is loaded from `.env` in the current directory or `~/.env`:
 
 ```bash
 OPENROUTER_API_KEY=sk-or-v1-...
-MODEL=openrouter/moonshotai/kimi-k2
+MODEL=anthropic/claude-3.5-sonnet
 MAX_TOKENS=16384
 ```
-
-### OpenRouter
-
-Uses [OpenRouter](https://openrouter.ai) to access any model. Set your API key and model in `~/.env`.
-
-### Anthropic Direct
-
-If no `OPENROUTER_API_KEY` is set, uses Anthropic API directly. Set `ANTHROPIC_API_KEY` in `~/.env`.
-
-## Build & Run
-
-```bash
-make build
-./dist/smallcode
-```
-
-Or use `make run`.
 
 ## Controls
 
@@ -44,9 +46,16 @@ Or use `make run`.
 
 ## Commands
 
-- `/h` - Show help
-- `/c` - Clear conversation
-- `/q` or `exit` - Quit
+| Command | Description |
+|---------|-------------|
+| `/h` | Show help menu |
+| `/init` | Initialize project (.env, .smallcode, git init) |
+| `/add <path>`| Explicitly add a file's content to the conversation context |
+| `/s` | Summarize conversation and clear history (keeping context lean) |
+| `/c` | Clear conversation history |
+| `/debug` | Toggle debug mode (token counts, raw tool args) |
+| `/yolo` | Toggle YOLO mode (bypasses all security protections) |
+| `/q`, `exit` | Quit |
 
 ## Tools
 
@@ -55,45 +64,32 @@ Or use `make run`.
 | `read` | Read file with line numbers, offset/limit |
 | `write` | Write content to file |
 | `edit` | Replace string in file (must be unique) |
-| `glob` | Find files by pattern, sorted by mtime |
-| `grep` | Search files for regex |
-| `bash` | Run shell command |
+| `glob` | Find files by pattern (automatically excludes .git, etc.) |
+| `grep` | Search files for regex (automatically excludes .git, etc.) |
+| `bash` | Run shell commands (sandboxed by default) |
+| `remember` | Persist a fact to project memory (`.smallcode/memory.json`) |
+| `todo` | Manage project tasks and dependencies (`.smallcode/todos.json`) |
 
 ## Skills
 
-Skills are specialized instruction sets that can be invoked on-demand during conversation.
+Skills are specialized instruction sets stored as markdown files in `.smallcode/skills/`.
 
 ### Usage
-
 Prefix any message with `@skillname` to activate that skill:
-
 ```
-@example what is this?
-```
-
-### Creating Skills
-
-Add markdown files to `.smallcode/skills/`:
-
-```bash
-.smallcode/skills/
-├── example.md
-└── your-skill.md
+@context audit my memory
 ```
 
-Each skill file contains markdown that gets prepended to your message when invoked.
+### Included Skills
+- `@context`: Audit and consolidate your project's memory and tasks.
+- `@example`: A demonstration of the skills system.
 
-### Example Skill
+## Security & Isolation
 
-`.smallcode/skills/example.md`:
-```markdown
-# Example Skill
-
-You are an example skill that demonstrates the skills system.
-
-## Purpose
-Skills allow you to inject specialized instructions into your conversation on-demand.
-```
+- **Sandboxing:** Bash commands run in a restricted environment with limited PATH and isolated HOME/PWD.
+- **Directory Isolation:** File tools are restricted to the project root and cannot access sensitive system files (e.g., `.env`, `.ssh/`).
+- **Confirmation:** Destructive actions like `write`, `edit`, and `bash` require manual user approval ('y' to approve, 'n' to deny).
+- **Resource Limits:** Tool outputs are automatically truncated to prevent memory exhaustion and TUI clutter.
 
 ## License
 
