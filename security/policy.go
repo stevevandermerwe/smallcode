@@ -27,6 +27,23 @@ var bashDenyList = []string{
 	"> /dev/",
 	"chmod -R 777",
 	":(){ :|:&",
+	"curl ",
+	"wget ",
+	"chown ",
+	"mv /",
+	"rm /",
+	"find / ",
+	"systemctl",
+	"shutdown",
+	"reboot",
+	"passwd",
+	"shadow",
+	"| sh",
+	"| bash",
+	"> /etc/",
+	"> /var/",
+	"> /usr/",
+	"> /bin/",
 }
 
 func Check(toolName string, args map[string]interface{}, cwd string) PolicyResult {
@@ -58,14 +75,14 @@ func checkBash(args map[string]interface{}) PolicyResult {
 		if strings.Contains(cmd, pattern) {
 			return PolicyResult{
 				Decision: Block,
-				Reason:   fmt.Sprintf("bash command blocked: %s", pattern),
+				Reason:   fmt.Sprintf("bash command blocked: contains %q", pattern),
 			}
 		}
 	}
 
 	return PolicyResult{
 		Decision: Confirm,
-		Reason:   cmd,
+		Reason:   fmt.Sprintf("Run bash command: %s", cmd),
 	}
 }
 

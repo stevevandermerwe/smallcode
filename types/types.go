@@ -67,6 +67,7 @@ type Model struct {
 
 	// Debug & telemetry
 	Debug             bool
+	Yolo              bool
 	TotalInputTokens  int
 	TotalOutputTokens int
 }

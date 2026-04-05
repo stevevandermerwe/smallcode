@@ -84,6 +84,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			if input == "/yolo" {
+				m.Model.Yolo = !m.Model.Yolo
+				config.YOLO = m.Model.Yolo
+				state := "off"
+				if m.Model.Yolo {
+					state = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true).Render("ON")
+				}
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sYOLO mode %s%s", dimStyle, state, resetStyle))
+				return m, nil
+			}
+
 			m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s❯%s %s", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("❯"), resetStyle, input))
 			return m, m.SendMessage(input)
 		case tea.KeyBackspace:
@@ -214,7 +225,11 @@ func (m Model) View() string {
 	if m.Model.Debug {
 		debugInfo = fmt.Sprintf(" | %s[debug]%s", lipgloss.NewStyle().Foreground(lipgloss.Color("3")).Render("[debug]"), resetStyle)
 	}
-	header := fmt.Sprintf("%s smallcode %s| %s (%s)%s | %s%s%s",
+	yoloInfo := ""
+	if m.Model.Yolo {
+		yoloInfo = fmt.Sprintf(" | %s[YOLO]%s", lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true).Render("[YOLO]"), resetStyle)
+	}
+	header := fmt.Sprintf("%s smallcode %s| %s (%s)%s | %s%s%s%s",
 		lipgloss.NewStyle().Bold(true).Render("smallcode"),
 		resetStyle,
 		dimStyle,
@@ -223,6 +238,7 @@ func (m Model) View() string {
 		m.Model.Provider,
 		tokenInfo,
 		debugInfo,
+		yoloInfo,
 	)
 	lines = append(lines, header, "")
 
@@ -397,6 +413,11 @@ func (m *Model) processNextTool() tea.Cmd {
 		call := m.Model.ToolQueue[0]
 		m.Model.ToolQueue = m.Model.ToolQueue[1:]
 
+		if m.Model.Yolo {
+			security.Log("YOLO", call.Name, call.Args, "bypassing security")
+			return m.executeTool(call, true)
+		}
+
 		cwd, _ := os.Getwd()
 		policy := security.Check(call.Name, call.Args, cwd)
 
@@ -467,6 +488,7 @@ const helpText = `smallcode - Commands & Tips
 Commands:
   /h          Show this help
   /debug      Toggle debug mode (shows API details, token counts, tool args)
+  /yolo       Toggle YOLO mode (bypasses ALL security protections)
   /c          Clear conversation
   /q, exit    Quit
 
@@ -487,6 +509,9 @@ Tools:
 
 func BuildSystemPrompt(cwd string) string {
 	base := fmt.Sprintf("Concise coding assistant. cwd: %s", cwd)
+	if config.YOLO {
+		base += "\n\n[WARNING: YOLO MODE ACTIVE] Security protections are disabled. You have full system access. Use extreme caution."
+	}
 	ctx := LoadMemoryContext()
 	if ctx == "" {
 		return base

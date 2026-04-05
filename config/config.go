@@ -13,6 +13,7 @@ var (
 	API_URL        string
 	MODEL          string
 	MAX_TOKENS     int
+	YOLO           bool
 )
 
 func LoadDotenv(path string) {

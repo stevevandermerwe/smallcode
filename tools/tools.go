@@ -15,13 +15,39 @@ import (
 	"strings"
 	"time"
 
+	"smallcode/config"
 	"smallcode/types"
 )
 
+const MaxOutputSize = 32 * 1024 // 32KB
+
 func Read(args map[string]interface{}) string {
 	path, _ := args["path"].(string)
-	data, err := os.ReadFile(path)
+	
+	// Open file with limit
+	f, err := os.Open(path)
 	if err != nil {
+		return fmt.Sprintf("error: %v", err)
+	}
+	defer f.Close()
+
+	stat, err := f.Stat()
+	if err != nil {
+		return fmt.Sprintf("error: %v", err)
+	}
+
+	size := stat.Size()
+	limit := int64(MaxOutputSize)
+	if config.YOLO {
+		limit = 10 * 1024 * 1024 // 10MB limit for YOLO
+	}
+	if size > limit {
+		size = limit
+	}
+
+	data := make([]byte, size)
+	_, err = io.ReadFull(f, data)
+	if err != nil && err != io.EOF && err != io.ErrUnexpectedEOF {
 		return fmt.Sprintf("error: %v", err)
 	}
 
@@ -30,12 +56,12 @@ func Read(args map[string]interface{}) string {
 	if val, ok := args["offset"].(float64); ok {
 		offset = int(val)
 	}
-	limit := len(lines)
+	lcount := len(lines)
 	if val, ok := args["limit"].(float64); ok {
-		limit = int(val)
+		lcount = int(val)
 	}
 
-	end := offset + limit
+	end := offset + lcount
 	if end > len(lines) {
 		end = len(lines)
 	}
@@ -44,7 +70,12 @@ func Read(args map[string]interface{}) string {
 	for i := offset; i < end; i++ {
 		sb.WriteString(fmt.Sprintf("%4d| %s\n", i+1, lines[i]))
 	}
-	return sb.String()
+
+	res := sb.String()
+	if stat.Size() > limit {
+		res += fmt.Sprintf("\n(truncated; file size %d bytes exceeds %d byte limit)", stat.Size(), limit)
+	}
+	return res
 }
 
 func Write(args map[string]interface{}) string {
@@ -98,6 +129,11 @@ func Glob(args map[string]interface{}) string {
 		root = val
 	}
 
+	limit := MaxOutputSize
+	if config.YOLO {
+		limit = 1 * 1024 * 1024 // 1MB for YOLO
+	}
+
 	var matches []string
 	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
@@ -126,7 +162,11 @@ func Glob(args map[string]interface{}) string {
 	if len(matches) == 0 {
 		return "none"
 	}
-	return strings.Join(matches, "\n")
+	res := strings.Join(matches, "\n")
+	if len(res) > limit {
+		res = res[:limit] + "\n(truncated)"
+	}
+	return res
 }
 
 func Grep(args map[string]interface{}) string {
@@ -136,12 +176,18 @@ func Grep(args map[string]interface{}) string {
 		root = val
 	}
 
+	limit := MaxOutputSize
+	if config.YOLO {
+		limit = 1 * 1024 * 1024 // 1MB for YOLO
+	}
+
 	re, err := regexp.Compile(pat)
 	if err != nil {
 		return fmt.Sprintf("error: %v", err)
 	}
 
 	var hits []string
+	totalSize := 0
 	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -160,10 +206,12 @@ func Grep(args map[string]interface{}) string {
 		for scanner.Scan() {
 			line := scanner.Text()
 			if re.MatchString(line) {
-				hits = append(hits, fmt.Sprintf("%s:%d:%s", path, lineNum, line))
+				hit := fmt.Sprintf("%s:%d:%s", path, lineNum, line)
+				hits = append(hits, hit)
+				totalSize += len(hit)
 			}
 			lineNum++
-			if len(hits) >= 50 {
+			if totalSize >= limit || len(hits) >= 1000 {
 				return io.EOF
 			}
 		}
@@ -173,7 +221,11 @@ func Grep(args map[string]interface{}) string {
 	if len(hits) == 0 {
 		return "none"
 	}
-	return strings.Join(hits, "\n")
+	res := strings.Join(hits, "\n")
+	if totalSize >= limit {
+		res += "\n(truncated)"
+	}
+	return res
 }
 
 func Bash(args map[string]interface{}) string {
@@ -181,7 +233,22 @@ func Bash(args map[string]interface{}) string {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	cwd, _ := os.Getwd()
 	cmd := exec.CommandContext(ctx, "sh", "-c", cmdStr)
+	cmd.Dir = cwd
+
+	limit := MaxOutputSize
+	if config.YOLO {
+		cmd.Env = os.Environ()
+		limit = 1 * 1024 * 1024 // 1MB for YOLO
+	} else {
+		cmd.Env = []string{
+			"PATH=/usr/local/bin:/usr/bin:/bin",
+			"HOME=" + cwd,
+			"PWD=" + cwd,
+		}
+	}
+
 	var outBuf bytes.Buffer
 	stdout, _ := cmd.StdoutPipe()
 	cmd.Stderr = cmd.Stdout
@@ -192,7 +259,13 @@ func Bash(args map[string]interface{}) string {
 
 	scanner := bufio.NewScanner(stdout)
 	for scanner.Scan() {
-		outBuf.WriteString(scanner.Text() + "\n")
+		line := scanner.Text()
+		if outBuf.Len()+len(line) < limit {
+			outBuf.WriteString(line + "\n")
+		} else {
+			outBuf.WriteString("\n(output truncated)")
+			break
+		}
 	}
 
 	err := cmd.Wait()
