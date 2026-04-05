@@ -44,4 +44,23 @@ func TestSecurity(t *testing.T) {
 		t.Errorf("Expected large output in YOLO mode, got size: %d", len(res))
 	}
 	config.YOLO = false
+
+	// 5. Test Exclusions
+	os.MkdirAll("test_exclude/.git", 0755)
+	os.WriteFile("test_exclude/.git/secret.txt", []byte("secret"), 0644)
+	os.WriteFile("test_exclude/normal.txt", []byte("normal"), 0644)
+	defer os.RemoveAll("test_exclude")
+
+	res = Glob(map[string]interface{}{"pat": "*", "path": "test_exclude"})
+	if strings.Contains(res, ".git") {
+		t.Errorf("Expected Glob to exclude .git, but it was found: %s", res)
+	}
+	if !strings.Contains(res, "normal.txt") {
+		t.Errorf("Expected Glob to find normal.txt, but it was not found: %s", res)
+	}
+
+	res = Grep(map[string]interface{}{"pat": "secret", "path": "test_exclude"})
+	if res != "none" {
+		t.Errorf("Expected Grep to skip .git and return none, got: %s", res)
+	}
 }

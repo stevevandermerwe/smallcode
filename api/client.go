@@ -95,6 +95,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			if input == "/c" {
+				m.Model.Messages = []types.Message{}
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sConversation cleared.%s", dimStyle, resetStyle))
+				return m, nil
+			}
+
+			if input == "/s" {
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s❯%s %s", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("❯"), resetStyle, input))
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sSummarizing conversation and clearing history...%s", dimStyle, resetStyle))
+				prompt := "Please summarize our conversation so far. Highlight key decisions and current state. If there are important facts or pending tasks, use the `remember` or `todo` tools to persist them before concluding."
+				m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: prompt})
+				m.Model.Summarizing = true
+				m.Model.Waiting = true
+				return m, m.CallAPI(nil)
+			}
+
+			if strings.HasPrefix(input, "/add ") {
+				path := strings.TrimSpace(input[5:])
+				data, err := os.ReadFile(path)
+				if err != nil {
+					m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sError reading file: %v%s", errorStyle, err, resetStyle))
+					return m, nil
+				}
+				content := fmt.Sprintf("File: %s\n\n```\n%s\n```", path, string(data))
+				m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: content})
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sAdded %s to context.%s", dimStyle, path, resetStyle))
+				return m, nil
+			}
+
 			m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s❯%s %s", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("❯"), resetStyle, input))
 			return m, m.SendMessage(input)
 		case tea.KeyBackspace:
@@ -132,8 +161,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Model.AssistantBlocks = msg.Content
 		m.Model.CollectedResults = []types.ContentBlock{}
 
-		// Always append assistant message to history
-		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "assistant", Content: msg.Content})
+		if m.Model.Summarizing {
+			// Clear all previous history and start fresh with just the summary
+			m.Model.Messages = []types.Message{{Role: "assistant", Content: msg.Content}}
+			m.Model.Summarizing = false
+		} else {
+			// Always append assistant message to history
+			m.Model.Messages = append(m.Model.Messages, types.Message{Role: "assistant", Content: msg.Content})
+		}
 
 		// Extract tool calls and display output
 		var toolCalls []types.ToolCall
@@ -314,6 +349,17 @@ func (m *Model) CallAPI(toolResults []types.ContentBlock) tea.Cmd {
 			messages = append(messages, types.Message{Role: "user", Content: toolResults})
 		}
 
+		// Auto-Pruning: Slice history if it's over 90% of MAX_TOKENS
+		if config.MAX_TOKENS > 0 && m.Model.TotalInputTokens > int(float64(config.MAX_TOKENS)*0.9) {
+			pruneCount := len(messages) / 5 // Prune oldest 20%
+			if pruneCount > 0 {
+				messages = messages[pruneCount:]
+				// We update the local copy used for the request, but also update the model's history to reflect this permanent pruning
+				m.Model.Messages = m.Model.Messages[pruneCount:]
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sAuto-pruned oldest conversation history to save tokens.%s", dimStyle, resetStyle))
+			}
+		}
+
 		toolsSlice := []map[string]interface{}{
 			{"name": "read", "description": "Read file with line numbers", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string"}, "offset": map[string]interface{}{"type": "integer"}, "limit": map[string]interface{}{"type": "integer"}}, "required": []string{"path"}}},
 			{"name": "write", "description": "Write content to file", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string"}, "content": map[string]interface{}{"type": "string"}}, "required": []string{"path", "content"}}},
@@ -489,6 +535,8 @@ Commands:
   /h          Show this help
   /debug      Toggle debug mode (shows API details, token counts, tool args)
   /yolo       Toggle YOLO mode (bypasses ALL security protections)
+  /add <path> Add a file's content to the context
+  /s          Summarize conversation and prompt to save facts
   /c          Clear conversation
   /q, exit    Quit
 
@@ -509,6 +557,7 @@ Tools:
 
 func BuildSystemPrompt(cwd string) string {
 	base := fmt.Sprintf("Concise coding assistant. cwd: %s", cwd)
+	base += "\n\nSearch tools (glob, grep) automatically exclude .git, node_modules, and other build artifacts. Users may explicitly add files to context using `/add <path>`."
 	if config.YOLO {
 		base += "\n\n[WARNING: YOLO MODE ACTIVE] Security protections are disabled. You have full system access. Use extreme caution."
 	}

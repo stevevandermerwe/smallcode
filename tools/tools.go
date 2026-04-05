@@ -122,6 +122,30 @@ func Edit(args map[string]interface{}) string {
 	return "ok"
 }
 
+func isExcluded(path string) bool {
+	parts := strings.Split(filepath.ToSlash(path), "/")
+	excluded := []string{".git", "node_modules", "dist", ".smallcode"}
+	
+	// Read .smallcode/ignore if exists
+	if data, err := os.ReadFile(".smallcode/ignore"); err == nil {
+		lines := strings.Split(string(data), "\n")
+		for _, l := range lines {
+			if l = strings.TrimSpace(l); l != "" {
+				excluded = append(excluded, l)
+			}
+		}
+	}
+
+	for _, p := range parts {
+		for _, e := range excluded {
+			if p == e {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func Glob(args map[string]interface{}) string {
 	pat, _ := args["pat"].(string)
 	root := "."
@@ -137,6 +161,12 @@ func Glob(args map[string]interface{}) string {
 	var matches []string
 	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
+			return nil
+		}
+		if isExcluded(path) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		matched, _ := filepath.Match(pat, d.Name())
@@ -190,6 +220,12 @@ func Grep(args map[string]interface{}) string {
 	totalSize := 0
 	filepath.WalkDir(root, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
+			return nil
+		}
+		if isExcluded(path) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if d.IsDir() {
