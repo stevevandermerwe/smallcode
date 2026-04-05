@@ -103,12 +103,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			if input == "/h" {
+			if input == "/h" || input == "/help" {
 				m.Model.Output = append(m.Model.Output, helpText)
 				return m, nil
 			}
 
-			if input == "/debug" {
+			if input == "/debug" || input == "/d" {
 				m.Model.Debug = !m.Model.Debug
 				state := "off"
 				if m.Model.Debug {
@@ -118,7 +118,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			if input == "/yolo" {
+			if input == "/yolo" || input == "/y" {
 				m.Model.Yolo = !m.Model.Yolo
 				config.YOLO = m.Model.Yolo
 				state := "off"
@@ -129,13 +129,13 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
-			if input == "/c" {
+			if input == "/clear" || input == "/c" {
 				m.Model.Messages = []types.Message{}
 				m.Model.Output = append(m.Model.Output, dimStyle.Render("   Conversation cleared."))
 				return m, nil
 			}
 
-			if input == "/s" {
+			if input == "/summarize" || input == "/s" {
 				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s %s", userPrefix, input))
 				m.Model.Output = append(m.Model.Output, dimStyle.Render("   Summarizing conversation..."))
 				prompt := "Please summarize our conversation so far. Highlight key decisions and current state. If there are important facts or pending tasks, use the `remember` or `todo` tools to persist them before concluding."
@@ -143,6 +143,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Model.Summarizing = true
 				m.Model.Waiting = true
 				return m, m.CallAPI(nil)
+			}
+
+			if input == "/quit" || input == "/exit" || input == "/q" || input == "/e" {
+				memory.WriteSessionSummary(m.Model.Messages, m.Model.StartTime)
+				return m, tea.Quit
 			}
 
 			if strings.HasPrefix(input, "/add ") {
@@ -582,26 +587,26 @@ var (
 			Bold(true).
 			MarginBottom(1)
 
-	resetStyle     = lipgloss.NewStyle()
-	dimStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	errorStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
-	assistantStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
-	userPrefix     = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true).Render("❯")
+	resetStyle      = lipgloss.NewStyle()
+	dimStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
+	errorStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("9")).Bold(true)
+	assistantStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("14"))
+	userPrefix      = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true).Render("❯")
 	assistantPrefix = lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true).Render("◇")
-	toolStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
+	toolStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
 )
 
 const helpText = `smallcode - Commands & Tips
 
 Commands:
-  /h          Show this help
-  /init       Initialize project (.env, .smallcode, git init)
-  /debug      Toggle debug mode (shows API details, token counts, tool args)
-  /yolo       Toggle YOLO mode (bypasses ALL security protections)
-  /add <path> Add a file's content to the context
-  /s          Summarize conversation and prompt to save facts
-  /c          Clear conversation
-  /q, exit    Quit
+  /h, /help         Show this help
+  /init             Initialize project (.env, .smallcode, git init)
+  /debug, /d       Toggle debug mode (shows API details, token counts, tool args)
+  /yolo, /y         Toggle YOLO mode (bypasses ALL security protections)
+  /add <path>       Add a file's content to the context
+  /summarize, /s    Summarize conversation and prompt to save facts
+  /clear, /c        Clear conversation
+  /quit, /exit, /q  Quit
 
 Skills:
   @skillname  Activate a skill (e.g. @example)
@@ -697,12 +702,12 @@ func initProject() []string {
 
 	// 2. .smallcode directory and basics
 	os.MkdirAll(".smallcode/skills", 0755)
-	
+
 	files := map[string]string{
-		".gitignore":             ".env\ndist/\n",
-		".smallcode/ignore":      ".git\nnode_modules\ndist\n.smallcode\n",
-		".smallcode/memory.json": "{\n  \"version\": 1,\n  \"entries\": []\n}",
-		".smallcode/todos.json":  "{\n  \"version\": 1,\n  \"todos\": []\n}",
+		".gitignore":                   ".env\ndist/\n",
+		".smallcode/ignore":            ".git\nnode_modules\ndist\n.smallcode\n",
+		".smallcode/memory.json":       "{\n  \"version\": 1,\n  \"entries\": []\n}",
+		".smallcode/todos.json":        "{\n  \"version\": 1,\n  \"todos\": []\n}",
 		".smallcode/skills/example.md": "# Example Skill\n\nYou are an example skill that demonstrates the skills system.\n\n## Purpose\nSkills allow you to inject specialized instructions into your conversation on-demand.\n",
 		".smallcode/skills/context.md": "# Context Audit Skill\n\nYou are an expert context manager. Your task is to audit the current project context (Memory and Todos) to ensure they are lean, relevant, and accurate.\n\n## Objectives\n1. **Audit Memory:** Use the `remember` tool with `action=forget` to remove stale or redundant facts. Use `action=update` to consolidate related facts into single, concise entries.\n2. **Audit Todos:** Use the `todo` tool with `action=list` first to see all tasks. Then:\n    - `action=close` tasks that are finished but still open.\n    - `action=remove` duplicate tasks.\n    - `action=update` tasks to add better priority or clear up blocking dependencies.\n3. **Consolidate:** If a finished task resulted in a lasting project fact, ensure that fact is in `memory` before closing the `todo`.\n\n## Goal\nKeep the system prompt under control so that it doesn't waste tokens. Be aggressive but careful not to lose critical project information.\n",
 	}
