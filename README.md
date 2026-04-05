@@ -35,7 +35,7 @@ Configuration is loaded from `.env` in the current directory or `~/.env`:
 
 ```bash
 OPENROUTER_API_KEY=sk-or-v1-...
-MODEL=anthropic/claude-3.5-sonnet
+MODEL=minimax/minimax-m2.5
 MAX_TOKENS=16384
 ```
 
