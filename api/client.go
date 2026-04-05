@@ -16,6 +16,7 @@ import (
 	"smallcode/config"
 	"smallcode/helpers"
 	"smallcode/memory"
+	"smallcode/security"
 	"smallcode/skills"
 	"smallcode/todos"
 	"smallcode/tools"
@@ -39,6 +40,24 @@ func (m Model) Init() tea.Cmd {
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
+		// Handle confirmation prompt
+		if m.Model.PendingConfirm != nil {
+			switch msg.Type {
+			case tea.KeyRunes:
+				if len(msg.Runes) > 0 {
+					ch := string(msg.Runes[0])
+					call := m.Model.PendingConfirm.Call
+					if ch == "y" || ch == "Y" {
+						return m, func() tea.Msg { return m.executeTool(call, true) }
+					} else if ch == "n" || ch == "N" {
+						return m, func() tea.Msg { return m.executeTool(call, false) }
+					}
+				}
+			}
+			return m, nil
+		}
+
+		// Normal key handling
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEscape:
 			memory.WriteSessionSummary(m.Model.Messages, m.Model.StartTime)
@@ -79,20 +98,71 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Model.Waiting = false
 			return m, nil
 		}
-		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "assistant", Content: msg.Content})
+		m.Model.AssistantBlocks = msg.Content
+		m.Model.CollectedResults = []types.ContentBlock{}
+
+		// Extract tool calls
+		var toolCalls []types.ToolCall
 		for _, block := range msg.Content {
 			if block.Type == "text" {
 				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s%s%s", assistantStyle, block.Text, resetStyle))
 			}
 			if block.Type == "tool_use" {
 				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s%s(%s)%s", toolStyle, block.Name, helpers.Truncate(fmt.Sprintf("%v", block.Input), 50), resetStyle))
+				toolCalls = append(toolCalls, types.ToolCall{ID: block.ID, Name: block.Name, Args: block.Input})
 			}
 		}
-		if len(msg.ToolResults) > 0 {
-			m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: msg.ToolResults})
-			return m, m.CallAPI(msg.ToolResults)
+
+		m.Model.ToolQueue = toolCalls
+
+		// Start processing tools
+		if len(toolCalls) > 0 {
+			return m, m.processNextTool()
 		}
+
 		m.Model.Waiting = false
+
+	case types.ToolConfirmMsg:
+		m.Model.PendingConfirm = &msg
+		// View will render the confirmation prompt
+
+	case types.ToolExecResult:
+		// Tool was executed, add result to collected results
+		m.Model.CollectedResults = append(m.Model.CollectedResults, types.ContentBlock{
+			Type:   "tool_result",
+			ToolID: msg.ID,
+			Result: msg.Result,
+		})
+		m.Model.PendingConfirm = nil
+
+		// Continue processing remaining tools
+		if len(m.Model.ToolQueue) > 0 {
+			return m, m.processNextTool()
+		}
+
+		// All tools processed, send results back to API
+		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "assistant", Content: m.Model.AssistantBlocks})
+		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: m.Model.CollectedResults})
+		return m, m.CallAPI(m.Model.CollectedResults)
+
+	case types.ToolBlockedMsg:
+		// Tool was blocked, add error result
+		m.Model.CollectedResults = append(m.Model.CollectedResults, types.ContentBlock{
+			Type:   "tool_result",
+			ToolID: msg.Call.ID,
+			Result: fmt.Sprintf("error: %s", msg.Reason),
+		})
+
+		// Continue processing remaining tools
+		if len(m.Model.ToolQueue) > 0 {
+			return m, m.processNextTool()
+		}
+
+		// All tools processed, send results back to API
+		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "assistant", Content: m.Model.AssistantBlocks})
+		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: m.Model.CollectedResults})
+		return m, m.CallAPI(m.Model.CollectedResults)
+
 	case types.ToolOutput:
 		m.Model.ToolResults = append(m.Model.ToolResults, types.ToolResult{Name: msg.Name, Result: msg.Result, Error: msg.Err})
 		result := msg.Result
@@ -135,15 +205,23 @@ func (m Model) View() string {
 		lines = append(lines, "")
 	}
 
-	prompt := fmt.Sprintf("%s%s❯%s ", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("❯"), resetStyle, dimStyle)
-	if m.Model.Waiting {
-		prompt = fmt.Sprintf("%s%s⏳%s ", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("⏳"), resetStyle, dimStyle)
+	// Render confirmation prompt if pending
+	if m.Model.PendingConfirm != nil {
+		confirmLine := fmt.Sprintf("%s⚠ %s: %s%s", errorStyle, m.Model.PendingConfirm.Call.Name, m.Model.PendingConfirm.Reason, resetStyle)
+		lines = append(lines, confirmLine)
+		promptLine := fmt.Sprintf("  [y] approve  [n] deny")
+		lines = append(lines, promptLine)
+	} else {
+		prompt := fmt.Sprintf("%s%s❯%s ", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("❯"), resetStyle, dimStyle)
+		if m.Model.Waiting {
+			prompt = fmt.Sprintf("%s%s⏳%s ", lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("⏳"), resetStyle, dimStyle)
+		}
+		inputLine := prompt + m.Model.Input
+		if m.Model.Input == "" {
+			inputLine += dimStyle.Render("...") + resetStyle.Render("")
+		}
+		lines = append(lines, inputLine)
 	}
-	inputLine := prompt + m.Model.Input
-	if m.Model.Input == "" {
-		inputLine += dimStyle.Render("...") + resetStyle.Render("")
-	}
-	lines = append(lines, inputLine)
 
 	return lipgloss.NewStyle().Margin(1).Render(strings.Join(lines, "\n"))
 }
@@ -225,7 +303,6 @@ func (m *Model) CallAPI(toolResults []types.ContentBlock) tea.Cmd {
 
 		contentBlocks, _ := result["content"].([]interface{})
 		var assistantBlocks []types.ContentBlock
-		var newToolResults []types.ContentBlock
 
 		for _, b := range contentBlocks {
 			block := b.(map[string]interface{})
@@ -235,39 +312,80 @@ func (m *Model) CallAPI(toolResults []types.ContentBlock) tea.Cmd {
 				assistantBlocks = append(assistantBlocks, types.ContentBlock{Type: "text", Text: block["text"].(string)})
 			}
 			if blockType == "tool_use" {
+				id := block["id"].(string)
 				name := block["name"].(string)
 				args := block["input"].(map[string]interface{})
-				id := block["id"].(string)
-
-				var toolResult string
-				switch name {
-				case "read":
-					toolResult = tools.Read(args)
-				case "write":
-					toolResult = tools.Write(args)
-				case "edit":
-					toolResult = tools.Edit(args)
-				case "glob":
-					toolResult = tools.Glob(args)
-				case "grep":
-					toolResult = tools.Grep(args)
-				case "bash":
-					toolResult = tools.Bash(args)
-				case "remember":
-					toolResult = tools.Remember(args)
-				case "todo":
-					toolResult = todos.Execute(args)
-				default:
-					toolResult = "error: unknown tool"
-				}
-
 				assistantBlocks = append(assistantBlocks, types.ContentBlock{Type: "tool_use", ID: id, Name: name, Input: args})
-				newToolResults = append(newToolResults, types.ContentBlock{Type: "tool_result", ToolID: id, Result: toolResult})
 			}
 		}
 
-		return types.APIResponse{Content: assistantBlocks, ToolResults: newToolResults}
+		return types.APIResponse{Content: assistantBlocks, ToolResults: []types.ContentBlock{}}
 	}
+}
+
+// processNextTool processes the next tool in the queue
+func (m *Model) processNextTool() tea.Cmd {
+	return func() tea.Msg {
+		if len(m.Model.ToolQueue) == 0 {
+			return nil
+		}
+
+		call := m.Model.ToolQueue[0]
+		m.Model.ToolQueue = m.Model.ToolQueue[1:]
+
+		cwd, _ := os.Getwd()
+		policy := security.Check(call.Name, call.Args, cwd)
+
+		switch policy.Decision {
+		case security.Allow:
+			security.Log("ALLOW", call.Name, call.Args, "")
+			return m.executeTool(call, true)
+		case security.Block:
+			security.Log("BLOCK", call.Name, call.Args, policy.Reason)
+			return types.ToolBlockedMsg{Call: call, Reason: policy.Reason}
+		case security.Confirm:
+			security.Log("CONFIRM", call.Name, call.Args, "")
+			return types.ToolConfirmMsg{Call: call, Reason: policy.Reason}
+		}
+
+		return nil
+	}
+}
+
+// executeTool executes a tool and returns the result message
+func (m *Model) executeTool(call types.ToolCall, approved bool) types.ToolExecResult {
+	if !approved {
+		security.Log("DENY", call.Name, call.Args, "user denied")
+		return types.ToolExecResult{ID: call.ID, Result: "error: user denied this operation"}
+	}
+
+	var result string
+
+	switch call.Name {
+	case "read":
+		result = tools.Read(call.Args)
+	case "write":
+		result = tools.Write(call.Args)
+		security.Log("EXEC", call.Name, call.Args, "")
+	case "edit":
+		result = tools.Edit(call.Args)
+		security.Log("EXEC", call.Name, call.Args, "")
+	case "glob":
+		result = tools.Glob(call.Args)
+	case "grep":
+		result = tools.Grep(call.Args)
+	case "bash":
+		result = tools.Bash(call.Args)
+		security.Log("EXEC", call.Name, call.Args, "")
+	case "remember":
+		result = tools.Remember(call.Args)
+	case "todo":
+		result = todos.Execute(call.Args)
+	default:
+		result = "error: unknown tool"
+	}
+
+	return types.ToolExecResult{ID: call.ID, Result: result}
 }
 
 // Styles

@@ -56,6 +56,12 @@ type Model struct {
 	Height      int
 	ScrollOffset int
 	StartTime   time.Time
+
+	// Security & tool execution
+	PendingConfirm   *ToolConfirmMsg
+	ToolQueue        []ToolCall
+	CollectedResults []ContentBlock
+	AssistantBlocks  []ContentBlock
 }
 
 // Memory Types
@@ -102,4 +108,27 @@ type SessionRecord struct {
 	Session     string `json:"session"`
 	DurationMin int    `json:"duration_min"`
 	MsgCount    int    `json:"msg_count"`
+}
+
+// Security & Tool Execution Types
+
+type ToolCall struct {
+	ID   string
+	Name string
+	Args map[string]interface{}
+}
+
+type ToolConfirmMsg struct {
+	Call   ToolCall
+	Reason string
+}
+
+type ToolExecResult struct {
+	ID     string
+	Result string
+}
+
+type ToolBlockedMsg struct {
+	Call   ToolCall
+	Reason string
 }
