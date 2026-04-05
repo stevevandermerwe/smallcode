@@ -1,0 +1,19 @@
+# Binaries
+dist/
+*.exe
+
+# Go workspace
+go.work
+go.work.sum
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+
+# Local env
+.env
+.claude/
