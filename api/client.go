@@ -330,7 +330,11 @@ func (m Model) View() string {
 		lines = append(lines, inputLine)
 	}
 
-	return lipgloss.NewStyle().Padding(1, 2).Render(strings.Join(lines, "\n"))
+	return lipgloss.NewStyle().
+		Padding(1, 2).
+		Width(m.Model.Width).
+		Height(m.Model.Height).
+		Render(strings.Join(lines, "\n"))
 }
 
 // SendMessage adds user message and calls API
