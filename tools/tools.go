@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"smallcode/config"
+	"smallcode/repomapper"
 	"smallcode/types"
 )
 
@@ -382,3 +383,28 @@ func Remember(args map[string]interface{}) string {
 	}
 	return "ok"
 }
+
+func Map(args map[string]interface{}) string {
+	path := "."
+	if val, ok := args["path"].(string); ok {
+		path = val
+	}
+
+	rm := repomapper.NewRepoMapper()
+	output, err := rm.GenerateMap(path)
+	if err != nil {
+		return fmt.Sprintf("error: %v", err)
+	}
+
+	limit := MaxOutputSize
+	if config.YOLO {
+		limit = 1 * 1024 * 1024
+	}
+
+	if len(output) > limit {
+		output = output[:limit] + "\n(truncated)"
+	}
+
+	return output
+}
+

@@ -456,6 +456,7 @@ func (m *Model) CallAPI(toolResults []types.ContentBlock) tea.Cmd {
 			{"name": "glob", "description": "Find files by pattern", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"pat": map[string]interface{}{"type": "string"}, "path": map[string]interface{}{"type": "string"}}, "required": []string{"pat"}}},
 			{"name": "grep", "description": "Search files for regex", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"pat": map[string]interface{}{"type": "string"}, "path": map[string]interface{}{"type": "string"}}, "required": []string{"pat"}}},
 			{"name": "bash", "description": "Run shell command", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"cmd": map[string]interface{}{"type": "string"}}, "required": []string{"cmd"}}},
+			{"name": "map", "description": "Generate a hierarchical codebase map (Go, Python, Java, JS/TS) with symbol ranking", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string", "description": "Directory to map (default: .)"}}}},
 			{"name": "remember", "description": "Persist a fact to project memory", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"action": map[string]interface{}{"type": "string", "enum": []string{"add", "update", "forget"}}, "key": map[string]interface{}{"type": "string"}, "value": map[string]interface{}{"type": "string"}, "tags": map[string]interface{}{"type": "string"}}, "required": []string{"action", "key"}}},
 			{"name": "todo", "description": "Manage project todos with priorities and dependencies", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"action": map[string]interface{}{"type": "string", "enum": []string{"add", "update", "close", "reopen", "remove", "list"}}, "id": map[string]interface{}{"type": "string"}, "title": map[string]interface{}{"type": "string"}, "priority": map[string]interface{}{"type": "integer"}, "blocked_by": map[string]interface{}{"type": "string"}, "sources": map[string]interface{}{"type": "string"}, "status": map[string]interface{}{"type": "string"}}, "required": []string{"action"}}},
 		}
@@ -602,6 +603,8 @@ func (m *Model) executeTool(call types.ToolCall, approved bool) types.ToolExecRe
 	case "bash":
 		result = tools.Bash(call.Args)
 		security.Log("EXEC", call.Name, call.Args, "")
+	case "map":
+		result = tools.Map(call.Args)
 	case "remember":
 		result = tools.Remember(call.Args)
 	case "todo":
@@ -675,6 +678,7 @@ Tools:
   glob        Find files (pat, path?)
   grep        Search regex (pat, path?)
   bash        Run shell (cmd)
+  map         Codebase map (path?)
   remember    Memory (action, key, value?, tags?)
   todo        Todos (action, id?, title?, priority?, blocked_by?, sources?, status?)`
 

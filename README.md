@@ -69,6 +69,7 @@ MAX_TOKENS=16384
 | `glob` | Find files by pattern (automatically excludes .git, etc.) |
 | `grep` | Search files for regex (automatically excludes .git, etc.) |
 | `bash` | Run shell commands (sandboxed by default) |
+| `map` | Generate a hierarchical codebase map (Go, Python, Java, JS/TS) |
 | `remember` | Persist a fact to project memory (`.smallcode/memory.json`) |
 | `todo` | Manage project tasks and dependencies (`.smallcode/todos.json`) |
 
