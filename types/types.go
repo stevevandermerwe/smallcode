@@ -45,19 +45,19 @@ type ToolOutput struct {
 // Model - exported fields for external access
 
 type Model struct {
-	Messages    []Message
-	ToolResults []ToolResult
-	Input       string
-	Output      []string
-	Waiting     bool
-	Provider    string
-	ModelName   string
-	Err         error
-	Cursor      int
-	Width       int
-	Height      int
+	Messages     []Message
+	ToolResults  []ToolResult
+	Input        string
+	Output       []string
+	Waiting      bool
+	Provider     string
+	ModelName    string
+	Err          error
+	Cursor       int
+	Width        int
+	Height       int
 	ScrollOffset int
-	StartTime   time.Time
+	StartTime    time.Time
 
 	// Security & tool execution
 	PendingConfirm   *ToolConfirmMsg
@@ -66,12 +66,12 @@ type Model struct {
 	AssistantBlocks  []ContentBlock
 
 	// Debug & telemetry
-	Debug             bool
-	Yolo              bool
-	Summarizing       bool
+	Debug              bool
+	Yolo               bool
+	Summarizing        bool
 	PromptingForApiKey bool
-	TotalInputTokens  int
-	TotalOutputTokens int
+	TotalInputTokens   int
+	TotalOutputTokens  int
 }
 
 // Memory Types
@@ -85,8 +85,8 @@ type MemEntry struct {
 }
 
 type MemFile struct {
-	Version int       `json:"version"`
-	Updated string    `json:"updated"`
+	Version int        `json:"version"`
+	Updated string     `json:"updated"`
 	Entries []MemEntry `json:"entries"`
 }
 

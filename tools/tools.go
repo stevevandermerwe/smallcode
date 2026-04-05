@@ -23,7 +23,7 @@ const MaxOutputSize = 32 * 1024 // 32KB
 
 func Read(args map[string]interface{}) string {
 	path, _ := args["path"].(string)
-	
+
 	// Open file with limit
 	f, err := os.Open(path)
 	if err != nil {
@@ -125,7 +125,7 @@ func Edit(args map[string]interface{}) string {
 func isExcluded(path string) bool {
 	parts := strings.Split(filepath.ToSlash(path), "/")
 	excluded := []string{".git", "node_modules", "dist", ".smallcode"}
-	
+
 	// Read .smallcode/ignore if exists
 	if data, err := os.ReadFile(".smallcode/ignore"); err == nil {
 		lines := strings.Split(string(data), "\n")
@@ -278,9 +278,13 @@ func Bash(args map[string]interface{}) string {
 		cmd.Env = os.Environ()
 		limit = 1 * 1024 * 1024 // 1MB for YOLO
 	} else {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			homeDir = cwd
+		}
 		cmd.Env = []string{
 			"PATH=/usr/local/bin:/usr/bin:/bin",
-			"HOME=" + cwd,
+			"HOME=" + homeDir,
 			"PWD=" + cwd,
 		}
 	}
