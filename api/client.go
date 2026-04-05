@@ -163,6 +163,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 
+			if input == "/memory" || input == "/mem" {
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s %s", userPrefix, input))
+				m.Model.Output = append(m.Model.Output, dimStyle.Render("   Loading project memory and tasks..."))
+				
+				ctx := LoadMemoryContext()
+				if ctx == "" {
+					m.Model.Output = append(m.Model.Output, dimStyle.Render("   Memory and tasks are empty."))
+					return m, nil
+				}
+				
+				m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: ctx})
+				m.Model.Output = append(m.Model.Output, dimStyle.Render("   Added memory and tasks to context."))
+				return m, nil
+			}
+
 			if input == "/summarize" || input == "/s" {
 				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s %s", userPrefix, input))
 				m.Model.Output = append(m.Model.Output, dimStyle.Render("   Summarizing conversation..."))
@@ -664,6 +679,7 @@ Commands:
   /yolo, /y         Toggle YOLO mode (bypasses ALL security protections)
   /add <path>       Add a file's content to the context
   /map, /m          Add repository skeleton map to context
+  /memory, /mem     Add project memory and tasks to context
   /summarize, /s    Summarize conversation and prompt to save facts
   /clear, /c        Clear conversation
   /quit, /exit, /q  Quit
@@ -690,11 +706,7 @@ func BuildSystemPrompt(cwd string) string {
 	if config.YOLO {
 		base += "\n\n[WARNING: YOLO MODE ACTIVE] Security protections are disabled. You have full system access. Use extreme caution."
 	}
-	ctx := LoadMemoryContext()
-	if ctx == "" {
-		return base
-	}
-	return base + "\n\n" + ctx + "\n## Memory & Task Management\n- Use `todo` tool to manage work items (action=add|update|close|reopen|remove|list)\n- Set priority 1-3 (1=urgent). Use blocked_by to track dependencies (comma-separated IDs).\n- Add file:path or text:snippet sources when a todo relates to specific code.\n- Use `remember` tool to persist key project facts (action=add|update|forget)\n- When closing a todo that produced a lasting project fact, also use `remember` to record it.\n- Keep memory values under 200 chars; prefer update over adding duplicate keys"
+	return base + "\n\n## Memory & Task Management\n- Use `todo` tool to manage work items (action=add|update|close|reopen|remove|list)\n- Set priority 1-3 (1=urgent). Use blocked_by to track dependencies (comma-separated IDs).\n- Add file:path or text:snippet sources when a todo relates to specific code.\n- Use `remember` tool to persist key project facts (action=add|update|forget)\n- When closing a todo that produced a lasting project fact, also use `remember` to record it.\n- Keep memory values under 200 chars; prefer update over adding duplicate keys\n- Users may explicitly add project memory/tasks to context using `/memory`."
 }
 
 // LoadMemoryContext loads memory and todos for the system prompt

@@ -58,6 +58,7 @@ MAX_TOKENS=16384
 | `/trace`, `/t` | Toggle raw LLM traffic logging to `.smallcode/trace.log` |
 | `/yolo`, `/y` | Toggle YOLO mode (bypasses all security protections) |
 | `/map`, `/m` | Generate and add a repository skeleton map to context |
+| `/memory`, `/mem` | Add project memory and tasks to context |
 | `/q`, `/exit`, `exit` | Quit |
 
 ## Tools
