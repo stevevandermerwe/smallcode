@@ -1,6 +1,6 @@
-# smallcode
+# SmallCode
 
-Minimal Claude Code alternative powered by Bubbletea TUI.
+Minimal AI powered generator powered by Bubbletea TUI.
 
 ## Features
 
