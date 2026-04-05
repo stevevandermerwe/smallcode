@@ -10,6 +10,7 @@ Minimal AI powered generator powered by Bubbletea TUI.
 - **Smart Context Management:** Includes auto-pruning, conversation summarizing (`/s`), and token warning indicators.
 - **Persistent Memory:** Track project facts and tasks across sessions using `remember` and `todo` tools.
 - **Skills System:** Specialized instruction sets (e.g., `@context`, `@example`) invoked on-demand.
+- **Repository Mapping:** Universal codebase "skeleton" mapper using Tree-sitter for multi-language symbol extraction and ranking.
 - **Automatic Exclusions:** Search tools automatically ignore `.git`, `node_modules`, and build artifacts.
 - **Rich TUI:** Modern terminal interface with real-time token tracking and lipgloss styling.
 
@@ -55,6 +56,7 @@ MAX_TOKENS=16384
 | `/c` | Clear conversation history |
 | `/debug` | Toggle debug mode (token counts, raw tool args) |
 | `/yolo` | Toggle YOLO mode (bypasses all security protections) |
+| `/map`, `/m` | Generate and add a repository skeleton map to context |
 | `/q`, `exit` | Quit |
 
 ## Tools
@@ -90,6 +92,20 @@ Prefix any message with `@skillname` to activate that skill:
 - **Directory Isolation:** File tools are restricted to the project root and cannot access sensitive system files (e.g., `.env`, `.ssh/`).
 - **Confirmation:** Destructive actions like `write`, `edit`, and `bash` require manual user approval ('y' to approve, 'n' to deny).
 - **Resource Limits:** Tool outputs are automatically truncated to prevent memory exhaustion and TUI clutter.
+
+## Library & Modules
+
+### RepoMapper
+The `repomapper` module provides a universal way to generate a hierarchical map of a codebase for LLM context. It supports Go, Python, Java, and TypeScript/JavaScript using Tree-sitter.
+
+#### Usage:
+```go
+import "smallcode/repomapper"
+
+rm := repomapper.NewRepoMapper()
+output, err := rm.GenerateMap("./")
+fmt.Println(output)
+```
 
 ## License
 

@@ -25,6 +25,9 @@ clean: ## Remove dist directory
 tidy: ## Tidy go modules
 	go mod tidy
 
+test: ## Run tests
+	CGO_ENABLED=1 go test -v ./...
+
 build-all: ## Build for all platforms
 	@mkdir -p dist
 	@for platform in $(PLATFORMS); do \

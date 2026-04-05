@@ -17,6 +17,7 @@ import (
 	"smallcode/config"
 	"smallcode/helpers"
 	"smallcode/memory"
+	"smallcode/repomapper"
 	"smallcode/security"
 	"smallcode/skills"
 	"smallcode/todos"
@@ -132,6 +133,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if input == "/clear" || input == "/c" {
 				m.Model.Messages = []types.Message{}
 				m.Model.Output = append(m.Model.Output, dimStyle.Render("   Conversation cleared."))
+				return m, nil
+			}
+
+			if input == "/map" || input == "/m" {
+				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s %s", userPrefix, input))
+				m.Model.Output = append(m.Model.Output, dimStyle.Render("   Generating repository map..."))
+				
+				rm := repomapper.NewRepoMapper()
+				repoMap, err := rm.GenerateMap(".")
+				if err != nil {
+					m.Model.Output = append(m.Model.Output, fmt.Sprintf("   %s Error generating map: %v", errorStyle.Render("✘"), err))
+					return m, nil
+				}
+				
+				content := fmt.Sprintf("Repository Skeleton Map:\n\n```\n%s\n```", repoMap)
+				m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: content})
+				m.Model.Output = append(m.Model.Output, dimStyle.Render("   Added repository map to context."))
 				return m, nil
 			}
 
@@ -604,6 +622,7 @@ Commands:
   /debug, /d       Toggle debug mode (shows API details, token counts, tool args)
   /yolo, /y         Toggle YOLO mode (bypasses ALL security protections)
   /add <path>       Add a file's content to the context
+  /map, /m          Add repository skeleton map to context
   /summarize, /s    Summarize conversation and prompt to save facts
   /clear, /c        Clear conversation
   /quit, /exit, /q  Quit
@@ -625,7 +644,7 @@ Tools:
 
 func BuildSystemPrompt(cwd string) string {
 	base := fmt.Sprintf("Concise coding assistant. cwd: %s", cwd)
-	base += "\n\nSearch tools (glob, grep) automatically exclude .git, node_modules, and other build artifacts. Users may explicitly add files to context using `/add <path>`."
+	base += "\n\nSearch tools (glob, grep) automatically exclude .git, node_modules, and other build artifacts. Users may explicitly add files to context using `/add <path>` or generate a repository map with `/map`."
 	if config.YOLO {
 		base += "\n\n[WARNING: YOLO MODE ACTIVE] Security protections are disabled. You have full system access. Use extreme caution."
 	}
