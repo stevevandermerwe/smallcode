@@ -49,15 +49,16 @@ MAX_TOKENS=16384
 
 | Command | Description |
 |---------|-------------|
-| `/h` | Show help menu |
+| `/h`, `/help` | Show help menu |
 | `/init` | Initialize project (.env, .smallcode, git init) |
 | `/add <path>`| Explicitly add a file's content to the conversation context |
-| `/s` | Summarize conversation and clear history (keeping context lean) |
-| `/c` | Clear conversation history |
-| `/debug` | Toggle debug mode (token counts, raw tool args) |
-| `/yolo` | Toggle YOLO mode (bypasses all security protections) |
+| `/s`, `/summarize` | Summarize conversation and clear history (keeping context lean) |
+| `/c`, `/clear` | Clear conversation history |
+| `/debug`, `/d` | Toggle debug mode (token counts, raw tool args) |
+| `/trace`, `/t` | Toggle raw LLM traffic logging to `.smallcode/trace.log` |
+| `/yolo`, `/y` | Toggle YOLO mode (bypasses all security protections) |
 | `/map`, `/m` | Generate and add a repository skeleton map to context |
-| `/q`, `exit` | Quit |
+| `/q`, `/exit`, `exit` | Quit |
 
 ## Tools
 
