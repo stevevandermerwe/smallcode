@@ -1,187 +1,305 @@
-# SmallCode
+# 🤖 SmallCode
 
-Minimal AI powered generator powered by Bubbletea TUI.
+An AI-powered code assistant that lives in your terminal. SmallCode helps you explore, understand, and modify your codebase with the help of Claude—all from a beautiful TUI interface.
 
-## Features
+Think of it as having an expert pair programmer right in your terminal that understands your entire project and follows your security rules.
 
-- **Full Agentic Loop:** Seamless tool-use integration.
-- **Secure by Default:** Advanced security layer with Allow/Block/Confirm logic for destructive operations and shell commands.
-- **Tiered Permissions:** Configurable security levels (`strict`, `balanced`, `relaxed`) to manage tool approvals.
-- **Session Restoration:** Automatically saves session state to `.smallcode/session.json`. Resumes conversation and token counts on startup.
-- **Loop Prevention:** Automatically pauses and requests confirmation if the agent enters a high-frequency tool loop.
-- **YOLO Mode:** Optional unrestricted mode for power users.
-- **Smart Context Management:** Includes auto-pruning, conversation summarizing (`/s`), and token warning indicators.
-- **Persistent Memory:** Track project facts and tasks across sessions using `remember` and `todo` tools.
-- **Skills System:** Specialized instruction sets (e.g., `@context`, `@skills-builder`) invoked on-demand.
-- **Repository Mapping:** Universal codebase "skeleton" mapper using Tree-sitter for multi-language symbol extraction and ranking.
-- **Automatic Exclusions:** Search tools automatically ignore `.git`, `node_modules`, and build artifacts.
-- **Observability:** Structured logs for raw traffic (`trace.log`), tool execution (`audit.log`), and agent reasoning (`reasoning.jsonl`).
-- **Rich TUI:** Modern terminal interface with real-time token tracking and interactive skill selection.
+## ✨ What You Can Do
 
-## Prerequisites
+- Ask your AI assistant questions about your code
+- Have the AI read, understand, and modify files
+- Run terminal commands with safety checks
+- Keep track of project tasks and learnings across sessions
+- Create custom "skills" for specialized workflows
+- All with fine-grained control over what the AI can do
 
-To build and run `smallcode`, you need the following tools installed:
+## 🎯 Key Features
 
-- **Go 1.26+**: The core language used for the project.
-- **Make**: For running build and development commands.
-- **Git**: For version control and project initialization.
+- 🔐 **Secure by Default** — Advanced security with tiered permissions (`strict`, `balanced`, `relaxed`). You approve what the AI can do.
+- 🧠 **Agentic Loop** — The AI can read files, understand your code, and take actions automatically (with your approval).
+- 💾 **Session Persistence** — Your conversations, tasks, and project knowledge are saved automatically.
+- 🔄 **Smart Context** — Automatically manages token usage, summarizes conversations, and keeps things organized.
+- 📝 **Project Memory** — Track facts and tasks that persist across sessions with `/remember` and `/todo`.
+- 🎓 **Skills System** — Create custom instruction sets for specialized workflows (e.g., `@code-review`, `@docs-writer`).
+- 🗺️ **Code Mapping** — Automatically generates a "skeleton" of your codebase for quick understanding (supports Go, Python, Java, JS/TS).
+- 🛡️ **Safety First** — Prevents accidental destructive operations and asks for confirmation on risky actions.
+- 📊 **Rich Terminal UI** — Beautiful, modern interface with real-time token tracking and skill selection.
+- 🚀 **YOLO Mode** — Optional unrestricted mode for power users who know what they're doing.
 
-## Installation & Setup
+## 🚀 Quick Start
 
-### 1. Build from Source
+### Prerequisites
+
+You'll need a few tools on your machine:
+
+- **Go 1.26+** — Available at https://golang.org/dl/
+- **Make** — Usually comes with your system (test with `make --version`)
+- **Git** — Available at https://git-scm.com/
+- **OpenRouter API Key** — Free tier available at https://openrouter.ai/ (you'll need this to use Claude)
+
+### Installation & Setup
+
+1. **Build the project**
+   ```bash
+   make build
+   ```
+
+2. **Run the TUI**
+   ```bash
+   ./dist/smallcode
+   ```
+
+3. **Initialize your project**
+   Inside the TUI, type:
+   ```
+   /init
+   ```
+   This will create a `.env` template and set everything up. You'll need to add your API key to `.env`.
+
+4. **Run tests** (optional, but recommended)
+   ```bash
+   make test          # Run all unit tests
+   make test-harness  # Run end-to-end security tests
+   ```
+
+## ⚙️ Configuration
+
+Create a `.env` file in your project root (or in your home directory `~/.env`):
+
 ```bash
-make build
-```
-
-### 2. Run Tests
-```bash
-make test          # Run all unit tests
-make test-harness  # Run end-to-end security harness tests
-```
-
-### 3. Initialize Project
-Run the following command inside your project directory to set up the necessary structure:
-```bash
-./dist/smallcode
-# Inside the TUI, type:
-/init
-```
-This will create a `.env` template, initialize the `.smallcode/` directory, and run `git init` if needed.
-
-## Configuration
-
-Configuration is loaded from `.env` in the current directory or `~/.env`:
-
-```bash
+# Your OpenRouter API key (get one free at https://openrouter.ai/)
 OPENROUTER_API_KEY=sk-or-v1-...
+
+# Which AI model to use (default: minimax/minimax-m2.5)
+# Options: gpt-4, claude-3.5-sonnet, etc.
 MODEL=minimax/minimax-m2.5
+
+# Maximum tokens per response (higher = longer responses but costs more)
 MAX_TOKENS=16384
-SECURITY_LEVEL=balanced  # strict, balanced, relaxed
+
+# Security level: how careful the AI should be
+# strict   = Ask before every action
+# balanced = Auto-approve safe actions, ask about risky ones (recommended)
+# relaxed  = Auto-approve almost everything
+SECURITY_LEVEL=balanced
 ```
 
-## Controls
+**💡 Tip:** Run `/init` inside the TUI to automatically create a `.env` template with these settings.
 
-- `Enter` - Send message / Select skill
-- `Tab` - Autocomplete skill selection
-- `Up/Down` - Navigate skill selection dropdown
-- `Ctrl+C` / `Escape` - Quit (or close skill dropdown)
+## ⌨️ Keyboard Controls
 
-## Commands
+- **Enter** — Send a message or select a skill
+- **Tab** — Auto-complete skill names
+- **Up/Down** — Navigate dropdown menus
+- **Ctrl+C** or **Escape** — Quit (or close a dropdown)
 
-| Command | Description |
-|---------|-------------|
-| `/h`, `/help` | Show help menu |
-| `/init` | Initialize project (.env, .smallcode, git init) |
-| `/add <path>`| Explicitly add a file's content to the conversation context. Tip: Type `/add ` to trigger a recursive file selection dropdown. |
-| `/s`, `/summarize` | Summarize conversation and clear history (keeping context lean) |
-| `/c`, `/clear` | Clear conversation history |
-| `/debug`, `/d` | Toggle debug mode (token counts, raw tool args) |
-| `/trace`, `/t` | Toggle raw LLM traffic logging to `.smallcode/trace.log` |
-| `/yolo`, `/y` | Toggle YOLO mode (bypasses all security protections) |
-| `/map`, `/m` | Generate and add a repository skeleton map to context |
-| `/memory`, `/mem` | Add project memory and tasks to context |
-| `/q`, `/exit`, `exit` | Quit |
+## 🎮 Commands
 
-## Tools
+### Getting Started
+- `/help` or `/h` — Show the help menu
+- `/init` — Set up your project (creates `.env`, `.smallcode/`, initializes git)
 
-SmallCode uses a **Metadata-First Tool Registry** (defined in `tools/registry.go`). Tools are dynamically filtered based on the active skill to reduce context overhead.
+### Working with Files
+- `/add <path>` — Add a file's content to the conversation. Tip: Type `/add ` without a path to browse files interactively.
+- `/map` or `/m` — Generate a visual skeleton of your codebase to help the AI understand the structure
 
-| Tool | Description |
-|------|-------------|
-| `read` | Read file with line numbers, offset/limit |
-| `write` | Write content to file |
-| `edit` | Replace string in file (must be unique) |
-| `glob` | Find files by pattern (automatically excludes .git, etc.) |
-| `grep` | Search files for regex (automatically excludes .git, etc.) |
-| `bash` | Run shell commands (sandboxed by default) |
-| `map` | Generate a hierarchical codebase map (Go, Python, Java, JS/TS) |
-| `remember` | Persist a fact to project memory (`.smallcode/memory.json`) |
-| `todo` | Manage project tasks and dependencies (`.smallcode/todos.json`) |
+### Memory & Tasks
+- `/memory` or `/mem` — Show project facts and tasks you've saved
+- Remember facts using the `remember` tool in conversations
+- Track tasks using the `todo` tool
 
-## Skills
+### Conversation Management
+- `/summarize` or `/s` — Compress the conversation history (saves tokens for long conversations)
+- `/clear` or `/c` — Clear the conversation history (start fresh)
 
-Skills are specialized instruction sets stored as markdown files in `.smallcode/skills/`.
+### Debug & Power User
+- `/debug` or `/d` — Toggle debug mode to see token counts and tool details
+- `/trace` or `/t` — Log all LLM requests/responses to `.smallcode/trace.log` (great for troubleshooting)
+- `/yolo` or `/y` — Toggle unrestricted mode (skips all security checks—use with caution! 🚀)
 
-### Usage
-- Prefix any message with `@skillname` to activate that skill.
-- **Tip:** Type `@` to trigger an interactive dropdown of available skills.
+### Exiting
+- `/exit`, `/q`, or `exit` — Quit SmallCode
 
-### Included Skills
-- `@context`: Audit and consolidate your project's memory and tasks.
-- `@skills-builder`: An interactive assistant to help you define and save new skills.
-- `@example`: A demonstration of the skills system.
+## 🛠️ Available Tools
 
-## Security & Isolation
+The AI can use these tools to help you. Which tools are available depends on your security level and active skill:
 
-- **Tiered Risk Management:** Every tool is assigned a Risk Tier (Low, Medium, High). `SECURITY_LEVEL` controls auto-approval for lower tiers.
-- **Sandboxing:** Bash commands run in a restricted environment with limited PATH and isolated HOME/PWD.
-- **Directory Isolation:** File tools are restricted to the project root and cannot access sensitive system files (e.g., `.env`, `.ssh/`).
-- **Confirmation:** High-risk actions always require manual user approval unless YOLO mode is active.
-- **Resource Limits:** Tool outputs and conversation history are automatically managed to prevent context overflow.
+### File Operations
+- **`read`** — Read a file's contents with line numbers (great for understanding code)
+- **`write`** — Create or completely replace a file
+- **`edit`** — Make surgical changes to a file by finding and replacing text
 
-## Library & Modules
+### Search & Explore
+- **`glob`** — Find files by pattern (e.g., `*.py` or `src/**/*.go`). Automatically skips `.git`, `node_modules`, etc.
+- **`grep`** — Search file contents for text/regex patterns. Also skips ignored directories.
 
-### RepoMapper
-The `repomapper` module provides a universal way to generate a hierarchical map of a codebase for LLM context. It supports Go, Python, Java, and TypeScript/JavaScript using Tree-sitter.
+### Project Understanding
+- **`map`** — Generate a visual tree of your codebase with key symbols highlighted. Supports Go, Python, Java, JavaScript, and TypeScript.
 
-#### Usage:
+### Project Memory
+- **`remember`** — Save a fact that the AI should know. Saved to `.smallcode/memory.json` and restored each session.
+- **`todo`** — Create, update, and track project tasks. Saved to `.smallcode/todos.json`.
+
+### Power User
+- **`bash`** — Run shell commands (with safety checks). Great for running tests, git commands, deployments, etc.
+
+> **Note:** The AI will only use tools appropriate for the current task and your security settings.
+
+## 🎓 Skills (Custom Instructions)
+
+Skills are like "personalities" or "specializations" for the AI. They give it specific instructions for different types of tasks.
+
+### Built-in Skills
+- **`@context`** — Review and organize your project memory and tasks
+- **`@skills-builder`** — Interactive tool to create new custom skills
+- **`@example`** — A demo skill showing how the skills system works
+
+### Creating Your Own Skills
+You can create custom skills for your workflows:
+
+```
+Type: @skills-builder
+```
+
+This opens an interactive guide to create skills like:
+- `@code-review` — For reviewing code quality
+- `@docs-writer` — For writing documentation
+- `@refactor` — For systematic code refactoring
+
+Skills are saved in `.smallcode/skills/` and available across all your projects.
+
+### Using Skills
+1. Type `@skillname` before your message
+2. Or type `@` and select from a dropdown menu
+
+## 🔒 Security & Safety
+
+SmallCode is designed to be safe by default. Here's how it protects your code:
+
+### Three Security Levels
+- **`strict`** — Ask before every action (most cautious)
+- **`balanced`** — Auto-approve safe actions, ask about risky ones (recommended for most users)
+- **`relaxed`** — Auto-approve almost everything (trust the AI, but less safe)
+
+### How It Works
+- **Risk Assessment** — Every action the AI wants to take is classified as Low, Medium, or High risk
+- **Auto-Approval** — Low-risk actions are handled automatically based on your security level
+- **Confirmation** — High-risk actions (like deleting files) always require your approval
+- **Sandboxing** — Shell commands run in a restricted environment with limited access
+- **No System Access** — File tools can't access your `.env`, `.ssh/`, or other sensitive system files
+- **Context Limits** — Conversations are automatically pruned to prevent accidental context overflows
+
+### Emergency Override
+- **YOLO Mode** (`/yolo`) — Disables all safety checks (useful when you trust the AI completely, but be careful!)
+
+> **Best Practice:** Keep `SECURITY_LEVEL=balanced` unless you have a specific reason to change it.
+
+## 📚 RepoMapper (For Developers)
+
+If you want to use SmallCode's code mapping library in your own Go projects, you can import it:
+
 ```go
 import "smallcode/repomapper"
 
 rm := repomapper.NewRepoMapper()
-output, err := rm.GenerateMap("./")
-fmt.Println(output)
+tree, err := rm.GenerateMap("./")
+if err != nil {
+    log.Fatal(err)
+}
+fmt.Println(tree)  // Prints a hierarchical code structure
 ```
 
+This generates a visual tree of your codebase and extracts key symbols (functions, classes, etc.) for AI understanding. It supports:
+- 🔵 **Go** — Functions, methods, types
+- 🐍 **Python** — Functions, classes
+- ☕ **Java** — Methods, classes, interfaces
+- 📘 **JavaScript/TypeScript** — Functions, classes, methods, interfaces
 
-## Development VM & Deployment
 
-This project uses **Tart** for ARM64 virtualization on macOS and a custom deployment script to push binaries to the guest environment.
+## 🚀 Deployment (Linux)
 
-### Prerequisites
+Want to run SmallCode on a Linux server or VM? Here's how:
 
-* **Tart:** `brew install tart`
-* **sshpass:** `brew install sshpass` (required for automated deployment)
-* **VM Image:** Clone the base Debian image:
-  ```bash
-  tart clone ghcr.io/cirruslabs/debian:latest my-debian-vm
-  ```
+### Building for Linux
 
-### Virtual Machine Setup
-
-1. **Start the VM:**
-   ```bash
-   tart run my-debian-vm --no-graphics &
-   ```
-2. **Default Credentials:**
-   * **User:** `admin`
-   * **Password:** `admin`
-
-### Deploying the Binary
-
-The `deploy.sh` script automates the transfer of the Linux ARM64 binary from the host to the guest. It performs the following actions:
-
-* Connects via SSH using the VM's dynamic IP.
-* Transfers `./dist/smallcode-linux-arm64` to `~/bin/smallcode` on the guest.
-* Sets executable permissions.
-* Appends `~/bin` to the guest's `PATH` in `~/.bashrc` if not already present.
-
-**To deploy:**
 ```bash
-bash deploy.sh
+# Build for Linux x86-64
+make build-linux-amd64
+
+# Build for Linux ARM64 (Raspberry Pi, Apple Silicon VM, etc.)
+make build-linux-arm64
+
+# Or build both at once
+make build-linux
 ```
 
-### Usage in Guest
+The binaries will be in `dist/`.
 
-Once deployed, you can run the tool from any directory inside the VM:
+### Running on Linux
+
+1. Copy the binary to your Linux machine
+2. Make it executable: `chmod +x smallcode-linux-amd64`
+3. Run it: `./smallcode-linux-amd64`
+
+### VM Deployment (macOS to Linux)
+
+If you're using **Tart** for virtualization on macOS:
+
 ```bash
-smallcode
+# Install Tart
+brew install tart sshpass
+
+# Clone a Debian image
+tart clone ghcr.io/cirruslabs/debian:latest my-debian-vm
+
+# Start the VM
+tart run my-debian-vm --no-graphics &
+
+# Deploy SmallCode
+make build-linux-arm64
+bash deploy.sh  # Automated deployment script
 ```
 
-> **Note:** If the command is not found immediately after the first deployment, run `source ~/.bashrc` or restart your shell session in the guest.
+The script will:
+- Copy the binary to `~/bin/smallcode` on the VM
+- Set up permissions
+- Add `~/bin` to your PATH
+
+Then just run `smallcode` on the VM!
 
 
 
-## License
+## ❓ FAQ & Tips
+
+**Q: How do I get an API key?**
+A: Go to https://openrouter.ai/, sign up (free), and generate an API key in your account settings.
+
+**Q: Can I use a different AI model?**
+A: Yes! Set the `MODEL` variable in `.env`. OpenRouter supports Claude, GPT-4, and many others.
+
+**Q: What if the AI wants to do something I don't trust?**
+A: Don't approve it! Your security level controls how much auto-approval happens. Higher `SECURITY_LEVEL=strict` means you approve everything.
+
+**Q: Can I use SmallCode offline?**
+A: Not currently—it needs internet to reach OpenRouter's API.
+
+**Q: How do I contribute?**
+A: We'd love your help! Check out the code and feel free to submit PRs.
+
+**Q: Is my code safe?**
+A: Your code is sent to OpenRouter and the selected AI model. Review your security level and only use trusted models. For sensitive code, consider self-hosting.
+
+**Q: Can I create custom skills?**
+A: Absolutely! Type `@skills-builder` to create custom skills for your workflows.
+
+## 💡 Pro Tips
+
+- Use `/add` to add large files to context before asking questions
+- Use `/summarize` to compress long conversations and save tokens
+- Use `/map` to help the AI understand your codebase structure
+- Save facts with `/remember` so the AI knows about your project
+- Create skills for tasks you do repeatedly
+
+## 📝 License
 
 MIT
