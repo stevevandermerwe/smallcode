@@ -133,6 +133,55 @@ output, err := rm.GenerateMap("./")
 fmt.Println(output)
 ```
 
+
+## Development VM & Deployment
+
+This project uses **Tart** for ARM64 virtualization on macOS and a custom deployment script to push binaries to the guest environment.
+
+### Prerequisites
+
+* **Tart:** `brew install tart`
+* **sshpass:** `brew install sshpass` (required for automated deployment)
+* **VM Image:** Clone the base Debian image:
+  ```bash
+  tart clone ghcr.io/cirruslabs/debian:latest my-debian-vm
+  ```
+
+### Virtual Machine Setup
+
+1. **Start the VM:**
+   ```bash
+   tart run my-debian-vm --no-graphics &
+   ```
+2. **Default Credentials:**
+   * **User:** `admin`
+   * **Password:** `admin`
+
+### Deploying the Binary
+
+The `deploy.sh` script automates the transfer of the Linux ARM64 binary from the host to the guest. It performs the following actions:
+
+* Connects via SSH using the VM's dynamic IP.
+* Transfers `./dist/smallcode-linux-arm64` to `~/bin/smallcode` on the guest.
+* Sets executable permissions.
+* Appends `~/bin` to the guest's `PATH` in `~/.bashrc` if not already present.
+
+**To deploy:**
+```bash
+bash deploy.sh
+```
+
+### Usage in Guest
+
+Once deployed, you can run the tool from any directory inside the VM:
+```bash
+smallcode
+```
+
+> **Note:** If the command is not found immediately after the first deployment, run `source ~/.bashrc` or restart your shell session in the guest.
+
+
+
 ## License
 
 MIT
