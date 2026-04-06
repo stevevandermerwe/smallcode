@@ -1,21 +1,83 @@
-Building successful production agents is roughly **80% infrastructure engineering** and only **20% AI modeling**. The primary value of an agentic system lies in its architectural primitives rather than the underlying LLM.
+# 12 Capabilities of Production-Grade Agents
 
-The following 12 points define the essential engineering requirements for moving from a prototype to an enterprise-grade agent:
+> This document is based on insights from [Nate B Jones](https://youtu.be/FtCdYhspm7w?si=utfZFc3480Jdp7xu) on building enterprise-grade AI agents.
 
-### Core Architectural Principles
-1.  **Prioritize Infrastructure over Models:** Real-world utility is driven by the "boring" plumbing—the primitives that support the model—not the model itself.
-2.  **The 80/20 Execution Rule:** Success in production depends on rigorous engineering of non-glamorous components (security, state, and logging) rather than optimizing prompts or model weights.
-3.  **Avoid Premature Complexity:** Focus on foundational engineering principles first. Over-engineering early-stage agent logic often leads to failure modes that are difficult to debug.
+## The Big Picture
 
-### Infrastructure Primitives
-4.  **Metadata-First Tool Registry:** Maintain a registry that defines agent capabilities and schemas without executing code. This allows the system to manage and inspect agent possibilities safely.
-5.  **Tiered Permission Architecture:** Implement multi-layered security protocols (such as 18-module architectures for high-risk tools like Bash) to establish granular trust levels.
-6.  **Full Session Persistence:** Ensure the system can reconstruct the entire state—including conversation history, token usage, and active permissions—immediately following a system crash.
-7.  **Decoupled Workflow State:** Separate conversational history from the functional task state. This ensures that workflows can be retried or resumed after failures without polluting the dialogue context.
-8.  **Proactive Token Budgeting:** Integrate pre-turn checks and active budget tracking to prevent runaway costs and infinite loops before they occur.
-9.  **Structured System Observability:** Develop deep, structured streaming events and logs. This is critical for transparency and forensic reconstruction when an agent deviates from expected behavior.
-10. **Harness-Level Verification:** Use a dual-testing approach combining task-specific validation with broad harness testing to ensure updates don't compromise security guardrails.
+Here's a surprising fact: **Building successful AI agents is about 80% good engineering and 20% AI magic.**
 
-### Operational Maturity
-11. **Dynamic Tool Assembly:** Instead of loading an entire library, dynamically assemble "tool pools" based on the specific requirements of the current session to reduce overhead and model confusion.
-12. **Context Compaction & Role Specialization:** Automate the removal of non-essential transcript context to manage token windows, and organize agents into specific functional roles (e.g., Planner, Executor, Verifier) to maintain strict control over system behavior.
+Most people think better AI models = better agents. But the truth is that real-world value comes from the "boring" infrastructure—the plumbing that makes everything work reliably. The AI model is just one piece of the puzzle.
+
+If you want to move from a cool prototype to something you can actually trust in production, you need to nail these 12 fundamentals:
+
+---
+
+## 🏗️ Core Architectural Principles
+
+### 1. Infrastructure Over Models
+The unsexy stuff (security, reliability, persistence) matters way more than the AI model itself. Invest heavily in the plumbing.
+
+### 2. The 80/20 Rule
+Success comes from obsessing over the details nobody talks about—security, state management, and logging—not from tweaking prompts or chasing the latest model.
+
+### 3. Keep It Simple at First
+Don't over-engineer your agent architecture from day one. Build the fundamentals correctly, then add complexity only when you need it. Early over-engineering leads to bugs that are hell to debug.
+
+---
+
+## 🔧 Infrastructure Primitives
+
+### 4. Metadata-First Tool Registry
+Keep a catalog of what your agent *can* do without actually doing it. This lets you safely inspect, manage, and validate agent capabilities before execution.
+
+**Why?** You can show the AI what tools are available and let it decide what to use—without executing anything by accident.
+
+### 5. Tiered Permission Architecture
+Don't use all-or-nothing security. Create multiple security layers for high-risk tools (like shell commands). Think of it like: "This AI can read files, but it needs approval to delete anything."
+
+**Why?** Fine-grained control prevents accidents and lets you tune risk vs. usability.
+
+### 6. Full Session Persistence
+Save everything: conversation history, token usage, permissions, task state. If your agent crashes, it should be able to pick up exactly where it left off.
+
+**Why?** Users expect continuity. Nobody wants to restart a conversation because the system crashed.
+
+### 7. Separate Conversation from Task State
+Keep conversational history separate from what actually got done. If a task fails, the agent can retry it without re-reading all the old chat messages.
+
+**Why?** Cleaner error recovery and lower token usage.
+
+### 8. Budget Your Tokens Before They Run Out
+Monitor token usage as the agent works. Catch runaway costs and infinite loops *before* they happen, not after.
+
+**Why?** Prevents surprise bills and runaway agents.
+
+### 9. Deep Observability Through Logging
+Log everything in a structured way: what the AI decided to do, what tools it called, what happened. When something goes wrong, you need breadcrumbs to figure out why.
+
+**Why?** When an agent does something unexpected, you'll be grateful for detailed logs.
+
+### 10. Test Both the Details and the Big Picture
+Test individual features (unit tests), but also test the whole system under stress (integration tests). Make sure security guardrails hold up under real-world conditions.
+
+**Why?** Catches edge cases and ensures your safety measures actually work.
+
+---
+
+## 🚀 Operational Maturity
+
+### 11. Load Only the Tools You Need
+Instead of giving the agent access to every tool ever, dynamically give it only the tools relevant to the current task.
+
+**Why?** Reduces confusion (AI has fewer wrong options) and saves tokens.
+
+### 12. Clean Up Old Context & Specialize Roles
+Automatically trim old conversation history that isn't needed, and organize your agents by role (one for planning, one for execution, one for verification).
+
+**Why?** Keeps the AI focused, reduces token bloat, and makes complex systems more manageable.
+
+---
+
+## The Takeaway
+
+Building great agents isn't about finding the perfect AI model. It's about building rock-solid infrastructure that keeps agents reliable, safe, and cost-effective. Do these 12 things well, and you'll have a system that actually works in the real world.
