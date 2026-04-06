@@ -81,6 +81,11 @@ type Model struct {
 	SelectedSkillIdx int
 	ActiveSkill      string
 	SequentialToolCount int
+
+	// File Dropdown (/add)
+	ShowFiles       bool
+	FilteredFiles   []string
+	SelectedFileIdx int
 }
 
 // Memory Types
