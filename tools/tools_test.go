@@ -22,6 +22,7 @@ func TestSecurity(t *testing.T) {
 	}
 
 	// 2. Test Bash Sandbox (Working Directory)
+	config.BASH_TIMEOUT = 5
 	res = Bash(map[string]interface{}{"cmd": "pwd"})
 	cwd, _ := os.Getwd()
 	if !strings.Contains(res, cwd) {
@@ -29,14 +30,16 @@ func TestSecurity(t *testing.T) {
 	}
 
 	// 3. Test Bash Output Truncation
-	res = Bash(map[string]interface{}{"cmd": "printf 'a%.0s' {1..40000}"})
+	// Generate 40KB of output, which is > 32KB limit
+	res = Bash(map[string]interface{}{"cmd": "head -c 40000 /dev/zero | tr '\\0' 'a'"})
 	if !strings.Contains(res, "output truncated") {
-		t.Errorf("Expected bash output to be truncated, got size: %d", len(res))
+		t.Errorf("Expected bash output to be truncated, got size: %d, output: %s", len(res), res)
 	}
 
 	// 4. Test YOLO Mode
 	config.YOLO = true
-	res = Bash(map[string]interface{}{"cmd": "printf 'a%.0s' {1..40000}"})
+	// In YOLO mode, limit is 1MB, so 40KB should NOT be truncated
+	res = Bash(map[string]interface{}{"cmd": "head -c 40000 /dev/zero | tr '\\0' 'a'"})
 	if strings.Contains(res, "output truncated") {
 		t.Errorf("Expected YOLO mode to NOT truncate output, but it was truncated")
 	}

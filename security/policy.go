@@ -6,6 +6,10 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"smallcode/config"
+	"smallcode/tools"
+	"smallcode/types"
 )
 
 type Decision int
@@ -86,6 +90,15 @@ var bashDenyList = []string{
 
 func Check(toolName string, args map[string]interface{}, cwd string) PolicyResult {
 	var res PolicyResult
+	var tier types.RiskTier = types.RiskLow
+
+	// Find tool in registry to get its tier
+	for _, t := range tools.Registry {
+		if t.Name == toolName {
+			tier = t.Tier
+			break
+		}
+	}
 
 	switch toolName {
 	case "bash":
@@ -102,6 +115,25 @@ func Check(toolName string, args map[string]interface{}, cwd string) PolicyResul
 		res = checkGrep(args, cwd)
 	default:
 		res = PolicyResult{Decision: Allow, Reason: ""}
+	}
+
+	// Apply tiered security level policy
+	if res.Decision == Confirm {
+		level := strings.ToLower(config.SECURITY_LEVEL)
+		switch level {
+		case "relaxed":
+			if tier <= types.RiskMedium {
+				res.Decision = Allow
+				res.Reason = "auto-allowed (relaxed mode)"
+			}
+		case "balanced":
+			if tier == types.RiskLow {
+				res.Decision = Allow
+				res.Reason = "auto-allowed (balanced mode)"
+			}
+		case "strict":
+			// All confirmations remain Confirm
+		}
 	}
 
 	if res.Decision == Confirm && alwaysAllowed[toolName] {

@@ -71,8 +71,16 @@ type Model struct {
 	Yolo              bool
 	Summarizing        bool
 	PromptingForApiKey bool
+	PromptingForResume bool
 	TotalInputTokens   int
 	TotalOutputTokens  int
+
+	// Skill Dropdown
+	ShowSkills       bool
+	FilteredSkills   []string
+	SelectedSkillIdx int
+	ActiveSkill      string
+	SequentialToolCount int
 }
 
 // Memory Types
@@ -142,4 +150,23 @@ type ToolExecResult struct {
 type ToolBlockedMsg struct {
 	Call   ToolCall
 	Reason string
+}
+
+// Tool Registry Types
+
+type RiskTier int
+
+const (
+	RiskLow RiskTier = iota
+	RiskMedium
+	RiskHigh
+)
+
+type Tool struct {
+	Name        string
+	Description string
+	Schema      map[string]interface{}
+	Handler     func(args map[string]interface{}) string
+	Skills      []string // Optional: Skills that trigger this tool
+	Tier        RiskTier // Risk level for security policies
 }

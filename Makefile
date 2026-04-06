@@ -28,6 +28,9 @@ tidy: ## Tidy go modules
 test: ## Run tests
 	CGO_ENABLED=1 go test -v ./...
 
+test-harness: ## Run e2e security harness tests
+	CGO_ENABLED=1 go test -v ./api/...
+
 build-all: ## Build for all platforms
 	@mkdir -p dist
 	@for platform in $(PLATFORMS); do \

@@ -1,0 +1,2 @@
+{"data":{"input":"@skills-builder "},"event":"user_input","timestamp":"2026-04-06T11:43:45+02:00"}
+{"data":{"blocks":[{"type":"text","text":"I'd be happy to help you create a new skill! 🚀\n\nLet's start with the basics:\n\n**What do you want the new skill to do?**\n\n(For example: \"help me write documentation\", \"manage git workflows\", \"interact with Obsidian notes\", \"deploy apps to Vercel\", etc.)\n\nOnce you tell me the purpose, I'll ask some follow-up questions to build out the full skill."}]},"event":"api_response","timestamp":"2026-04-06T11:43:50+02:00"}

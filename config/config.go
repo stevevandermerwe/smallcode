@@ -15,6 +15,7 @@ var (
 	MAX_TOKENS     int
 	YOLO           bool
 	BASH_TIMEOUT   int // seconds
+	SECURITY_LEVEL string
 )
 
 func LoadDotenv(path string) {
@@ -66,6 +67,11 @@ func Init() {
 		if val, err := strconv.Atoi(timeoutStr); err == nil && val > 0 {
 			BASH_TIMEOUT = val
 		}
+	}
+
+	SECURITY_LEVEL = os.Getenv("SECURITY_LEVEL")
+	if SECURITY_LEVEL == "" {
+		SECURITY_LEVEL = "balanced"
 	}
 }
 

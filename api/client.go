@@ -66,14 +66,95 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Normal key handling
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEscape:
+			if m.Model.ShowSkills {
+				m.Model.ShowSkills = false
+				return m, nil
+			}
 			memory.WriteSessionSummary(m.Model.Messages, m.Model.StartTime)
 			return m, tea.Quit
-		case tea.KeyEnter:
+		case tea.KeyUp:
+			if m.Model.ShowSkills {
+				if m.Model.SelectedSkillIdx > 0 {
+					m.Model.SelectedSkillIdx--
+				} else {
+					m.Model.SelectedSkillIdx = len(m.Model.FilteredSkills) - 1
+				}
+				return m, nil
+			}
+		case tea.KeyDown:
+			if m.Model.ShowSkills {
+				if m.Model.SelectedSkillIdx < len(m.Model.FilteredSkills)-1 {
+					m.Model.SelectedSkillIdx++
+				} else {
+					m.Model.SelectedSkillIdx = 0
+				}
+				return m, nil
+			}
+		case tea.KeyTab, tea.KeyEnter:
+			if m.Model.ShowSkills && len(m.Model.FilteredSkills) > 0 {
+				selected := m.Model.FilteredSkills[m.Model.SelectedSkillIdx]
+				// Replace the @part with the full skill name
+				words := strings.Fields(m.Model.Input)
+				if len(words) > 0 {
+					lastWordIdx := -1
+					for i := len(m.Model.Input) - 1; i >= 0; i-- {
+						if m.Model.Input[i] == '@' {
+							lastWordIdx = i
+							break
+						}
+					}
+					if lastWordIdx != -1 {
+						m.Model.Input = m.Model.Input[:lastWordIdx] + "@" + selected + " "
+					}
+				}
+				m.Model.ShowSkills = false
+				return m, nil
+			}
+			if msg.Type == tea.KeyTab {
+				return m, nil
+			}
 			if m.Model.Waiting || m.Model.Input == "" {
 				return m, nil
 			}
 			input := m.Model.Input
 			m.Model.Input = ""
+
+			if m.Model.PromptingForResume {
+				ch := strings.ToLower(strings.TrimSpace(input))
+				if ch == "y" || ch == "yes" {
+					if data, err := os.ReadFile(".smallcode/session.json"); err == nil {
+						var state map[string]interface{}
+						if json.Unmarshal(data, &state) == nil {
+							// Restore messages
+							if msgs, ok := state["messages"].([]interface{}); ok {
+								jsonData, _ := json.Marshal(msgs)
+								var restored []types.Message
+								json.Unmarshal(jsonData, &restored)
+								m.Model.Messages = restored
+							}
+							// Restore tokens
+							if val, ok := state["input_tokens"].(float64); ok {
+								m.Model.TotalInputTokens = int(val)
+							}
+							if val, ok := state["out_tokens"].(float64); ok {
+								m.Model.TotalOutputTokens = int(val)
+							}
+							// Restore start time
+							if val, ok := state["start_time"].(string); ok {
+								if t, err := time.Parse(time.RFC3339, val); err == nil {
+									m.Model.StartTime = t
+								}
+							}
+							m.Model.Output = append(m.Model.Output, dimStyle.Render("   ✔ Session restored."))
+						}
+					}
+				} else {
+					os.Remove(".smallcode/session.json")
+					m.Model.Output = append(m.Model.Output, dimStyle.Render("   ℹ Starting fresh session."))
+				}
+				m.Model.PromptingForResume = false
+				return m, nil
+			}
 
 			if m.Model.PromptingForApiKey {
 				key := strings.TrimSpace(input)
@@ -218,18 +299,78 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 
 			m.Model.Output = append(m.Model.Output, fmt.Sprintf("%s %s", userPrefix, input))
+			m.logReasoning("user_input", map[string]string{"input": input})
+			m.saveSession()
 			return m, m.SendMessage(input)
 		case tea.KeyBackspace:
 			if len(m.Model.Input) > 0 {
 				m.Model.Input = m.Model.Input[:len(m.Model.Input)-1]
 			}
+			// Re-filter or hide
+			if m.Model.ShowSkills {
+				lastWordIdx := -1
+				for i := len(m.Model.Input) - 1; i >= 0; i-- {
+					if m.Model.Input[i] == '@' {
+						lastWordIdx = i
+						break
+					}
+				}
+				if lastWordIdx == -1 {
+					m.Model.ShowSkills = false
+				} else {
+					filter := m.Model.Input[lastWordIdx+1:]
+					m.Model.FilteredSkills = []string{}
+					for _, s := range skills.List() {
+						if strings.HasPrefix(s, filter) {
+							m.Model.FilteredSkills = append(m.Model.FilteredSkills, s)
+						}
+					}
+					if len(m.Model.FilteredSkills) == 0 {
+						m.Model.ShowSkills = false
+					}
+					if m.Model.SelectedSkillIdx >= len(m.Model.FilteredSkills) {
+						m.Model.SelectedSkillIdx = 0
+					}
+				}
+			}
 		case tea.KeySpace:
 			if !m.Model.Waiting {
 				m.Model.Input += " "
+				m.Model.ShowSkills = false
 			}
 		case tea.KeyRunes:
 			if !m.Model.Waiting {
 				m.Model.Input += string(msg.Runes)
+				input := m.Model.Input
+				lastWordIdx := -1
+				for i := len(input) - 1; i >= 0; i-- {
+					if input[i] == ' ' {
+						break
+					}
+					if input[i] == '@' {
+						lastWordIdx = i
+						break
+					}
+				}
+
+				if lastWordIdx != -1 {
+					m.Model.ShowSkills = true
+					filter := input[lastWordIdx+1:]
+					m.Model.FilteredSkills = []string{}
+					for _, s := range skills.List() {
+						if strings.HasPrefix(s, filter) {
+							m.Model.FilteredSkills = append(m.Model.FilteredSkills, s)
+						}
+					}
+					if len(m.Model.FilteredSkills) == 0 {
+						m.Model.ShowSkills = false
+					}
+					if m.Model.SelectedSkillIdx >= len(m.Model.FilteredSkills) {
+						m.Model.SelectedSkillIdx = 0
+					}
+				} else {
+					m.Model.ShowSkills = false
+				}
 			}
 		}
 	case tea.WindowSizeMsg:
@@ -276,9 +417,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.Model.ToolQueue = toolCalls
+		m.logReasoning("api_response", map[string]interface{}{"blocks": msg.Content})
+		m.saveSession()
 
 		// Start processing tools
 		if len(toolCalls) > 0 {
+			m.Model.SequentialToolCount++
 			return m, m.processNextTool()
 		}
 
@@ -305,6 +449,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// All tools processed — assistant message already in history; send tool results back
 		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: m.Model.CollectedResults})
+		m.saveSession()
 		return m, m.CallAPI(nil)
 
 	case types.ToolBlockedMsg:
@@ -320,6 +465,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 
 		m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: m.Model.CollectedResults})
+		m.saveSession()
 		return m, m.CallAPI(nil)
 
 	case types.ToolOutput:
@@ -395,6 +541,18 @@ func (m Model) View() string {
 		promptLine := fmt.Sprintf("  %s[y] approve  [n] deny  [a] always allow%s", dimStyle.Render(""), resetStyle.Render(""))
 		lines = append(lines, promptLine)
 	} else {
+		if m.Model.ShowSkills && len(m.Model.FilteredSkills) > 0 {
+			for i, skill := range m.Model.FilteredSkills {
+				prefix := "  "
+				style := dimStyle
+				if i == m.Model.SelectedSkillIdx {
+					prefix = "> "
+					style = skillStyle
+				}
+				lines = append(lines, fmt.Sprintf("    %s%s", prefix, style.Render(skill)))
+			}
+		}
+
 		promptSym := lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render("❯")
 		if m.Model.Waiting {
 			promptSym = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("13")).Render("⏳")
@@ -425,6 +583,7 @@ func (m *Model) SendMessage(input string) tea.Cmd {
 	var skillContent string
 	if matches != nil {
 		skillName := matches[1]
+		m.Model.ActiveSkill = skillName
 		if content, err := skills.Load(skillName); err == nil {
 			skillContent = fmt.Sprintf("[Skill: %s]\n\n%s\n\n", skillName, content)
 			m.Model.Output = append(m.Model.Output, dimStyle.Render(fmt.Sprintf("   Applied skill: %s", skillName)))
@@ -440,6 +599,7 @@ func (m *Model) SendMessage(input string) tea.Cmd {
 	fullMessage := skillContent + input
 	m.Model.Messages = append(m.Model.Messages, types.Message{Role: "user", Content: fullMessage})
 	m.Model.Waiting = true
+	m.Model.SequentialToolCount = 0
 	return m.CallAPI(nil)
 }
 
@@ -460,21 +620,37 @@ func (m *Model) CallAPI(toolResults []types.ContentBlock) tea.Cmd {
 				messages = messages[pruneCount:]
 				// We update the local copy used for the request, but also update the model's history to reflect this permanent pruning
 				m.Model.Messages = m.Model.Messages[pruneCount:]
+				m.logReasoning("context_prune", map[string]int{"pruned_count": pruneCount})
 				m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sAuto-pruned oldest conversation history to save tokens.%s", dimStyle, resetStyle))
 			}
 		}
 
-		toolsSlice := []map[string]interface{}{
-			{"name": "read", "description": "Read file with line numbers", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string"}, "offset": map[string]interface{}{"type": "integer"}, "limit": map[string]interface{}{"type": "integer"}}, "required": []string{"path"}}},
-			{"name": "write", "description": "Write content to file", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string"}, "content": map[string]interface{}{"type": "string"}}, "required": []string{"path", "content"}}},
-			{"name": "edit", "description": "Replace old with new in file", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string"}, "old": map[string]interface{}{"type": "string"}, "new": map[string]interface{}{"type": "string"}, "all": map[string]interface{}{"type": "boolean"}}, "required": []string{"path", "old", "new"}}},
-			{"name": "glob", "description": "Find files by pattern", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"pat": map[string]interface{}{"type": "string"}, "path": map[string]interface{}{"type": "string"}}, "required": []string{"pat"}}},
-			{"name": "grep", "description": "Search files for regex", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"pat": map[string]interface{}{"type": "string"}, "path": map[string]interface{}{"type": "string"}}, "required": []string{"pat"}}},
-			{"name": "bash", "description": "Run shell command", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"cmd": map[string]interface{}{"type": "string"}}, "required": []string{"cmd"}}},
-			{"name": "map", "description": "Generate a hierarchical codebase map (Go, Python, Java, JS/TS) with symbol ranking", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"path": map[string]interface{}{"type": "string", "description": "Directory to map (default: .)"}}}},
-			{"name": "remember", "description": "Persist a fact to project memory", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"action": map[string]interface{}{"type": "string", "enum": []string{"add", "update", "forget"}}, "key": map[string]interface{}{"type": "string"}, "value": map[string]interface{}{"type": "string"}, "tags": map[string]interface{}{"type": "string"}}, "required": []string{"action", "key"}}},
-			{"name": "todo", "description": "Manage project todos with priorities and dependencies", "input_schema": map[string]interface{}{"type": "object", "properties": map[string]interface{}{"action": map[string]interface{}{"type": "string", "enum": []string{"add", "update", "close", "reopen", "remove", "list"}}, "id": map[string]interface{}{"type": "string"}, "title": map[string]interface{}{"type": "string"}, "priority": map[string]interface{}{"type": "integer"}, "blocked_by": map[string]interface{}{"type": "string"}, "sources": map[string]interface{}{"type": "string"}, "status": map[string]interface{}{"type": "string"}}, "required": []string{"action"}}},
+		var toolsSlice []map[string]interface{}
+		for _, t := range tools.Registry {
+			include := false
+			if m.Model.ActiveSkill == "" {
+				include = true // Default: send all if no skill active (or maybe just core?)
+			} else {
+				for _, s := range t.Skills {
+					if s == "core" || s == m.Model.ActiveSkill {
+						include = true
+						break
+					}
+				}
+			}
+
+			if include {
+				toolsSlice = append(toolsSlice, map[string]interface{}{
+					"name":         t.Name,
+					"description":  t.Description,
+					"input_schema": t.Schema,
+				})
+			}
 		}
+
+		// Reset ActiveSkill after it's been used to assemble tools for this turn
+		// actually, maybe we should keep it for the whole conversation turn (multi-tool)
+		// but SendMessage resets it next time.
 
 		cwd, _ := os.Getwd()
 		payload := map[string]interface{}{
@@ -569,6 +745,10 @@ func (m *Model) processNextTool() tea.Cmd {
 		call := m.Model.ToolQueue[0]
 		m.Model.ToolQueue = m.Model.ToolQueue[1:]
 
+		if m.Model.SequentialToolCount > 5 {
+			return types.ToolConfirmMsg{Call: call, Reason: "loop prevention: too many sequential tool calls. Please approve to continue."}
+		}
+
 		if m.Model.Yolo {
 			security.Log("YOLO", call.Name, call.Args, "bypassing security")
 			return m.executeTool(call, true)
@@ -580,12 +760,16 @@ func (m *Model) processNextTool() tea.Cmd {
 		switch policy.Decision {
 		case security.Allow:
 			security.Log("ALLOW", call.Name, call.Args, "")
+			m.logReasoning("tool_allow", map[string]interface{}{"tool": call.Name, "args": call.Args})
 			return m.executeTool(call, true)
+
 		case security.Block:
 			security.Log("BLOCK", call.Name, call.Args, policy.Reason)
+			m.logReasoning("tool_block", map[string]interface{}{"tool": call.Name, "args": call.Args, "reason": policy.Reason})
 			return types.ToolBlockedMsg{Call: call, Reason: policy.Reason}
 		case security.Confirm:
 			security.Log("CONFIRM", call.Name, call.Args, "")
+			m.logReasoning("tool_confirm", map[string]interface{}{"tool": call.Name, "args": call.Args, "reason": policy.Reason})
 			return types.ToolConfirmMsg{Call: call, Reason: policy.Reason}
 		}
 
@@ -600,35 +784,17 @@ func (m *Model) executeTool(call types.ToolCall, approved bool) types.ToolExecRe
 		return types.ToolExecResult{ID: call.ID, Result: "error: user denied this operation"}
 	}
 
-	var result string
-
-	switch call.Name {
-	case "read":
-		result = tools.Read(call.Args)
-	case "write":
-		result = tools.Write(call.Args)
-		security.Log("EXEC", call.Name, call.Args, "")
-	case "edit":
-		result = tools.Edit(call.Args)
-		security.Log("EXEC", call.Name, call.Args, "")
-	case "glob":
-		result = tools.Glob(call.Args)
-	case "grep":
-		result = tools.Grep(call.Args)
-	case "bash":
-		result = tools.Bash(call.Args)
-		security.Log("EXEC", call.Name, call.Args, "")
-	case "map":
-		result = tools.Map(call.Args)
-	case "remember":
-		result = tools.Remember(call.Args)
-	case "todo":
-		result = todos.Execute(call.Args)
-	default:
-		result = "error: unknown tool"
+	for _, t := range tools.Registry {
+		if t.Name == call.Name {
+			if t.Name == "write" || t.Name == "edit" || t.Name == "bash" {
+				security.Log("EXEC", t.Name, call.Args, "")
+			}
+			result := t.Handler(call.Args)
+			return types.ToolExecResult{ID: call.ID, Result: result}
+		}
 	}
 
-	return types.ToolExecResult{ID: call.ID, Result: result}
+	return types.ToolExecResult{ID: call.ID, Result: "error: unknown tool"}
 }
 
 // logTraffic writes raw API communication to .smallcode/trace.log
@@ -650,6 +816,34 @@ func (m *Model) logTraffic(direction string, data []byte) {
 	f.WriteString(entry)
 }
 
+func (m *Model) saveSession() {
+	os.MkdirAll(".smallcode", 0755)
+	data, _ := json.Marshal(map[string]interface{}{
+		"messages":     m.Model.Messages,
+		"input_tokens": m.Model.TotalInputTokens,
+		"out_tokens":   m.Model.TotalOutputTokens,
+		"start_time":   m.Model.StartTime,
+	})
+	os.WriteFile(".smallcode/session.json", data, 0644)
+}
+
+func (m *Model) logReasoning(event string, data interface{}) {
+	os.MkdirAll(".smallcode", 0755)
+	f, err := os.OpenFile(".smallcode/reasoning.jsonl", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+
+	entry := map[string]interface{}{
+		"timestamp": time.Now().Format(time.RFC3339),
+		"event":     event,
+		"data":      data,
+	}
+	jsonBytes, _ := json.Marshal(entry)
+	f.Write(append(jsonBytes, '\n'))
+}
+
 // Styles
 
 var (
@@ -667,6 +861,7 @@ var (
 	userPrefix      = lipgloss.NewStyle().Foreground(lipgloss.Color("12")).Bold(true).Render("❯")
 	assistantPrefix = lipgloss.NewStyle().Foreground(lipgloss.Color("14")).Bold(true).Render("◇")
 	toolStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("10")).Bold(true)
+	skillStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true)
 )
 
 const helpText = `smallcode - Commands & Tips
@@ -702,6 +897,7 @@ Tools:
 
 func BuildSystemPrompt(cwd string) string {
 	base := fmt.Sprintf("Concise coding assistant. cwd: %s", cwd)
+	base += "\n\nTool Registry: Your capabilities are defined in `tools/registry.go`. Each tool has a name, description, and JSON schema."
 	base += "\n\nSearch tools (glob, grep) automatically exclude .git, node_modules, and other build artifacts. Users may explicitly add files to context using `/add <path>` or generate a repository map with `/map`."
 	if config.YOLO {
 		base += "\n\n[WARNING: YOLO MODE ACTIVE] Security protections are disabled. You have full system access. Use extreme caution."
@@ -755,6 +951,15 @@ func NewModel() *Model {
 	// Check if project is initialized
 	if _, err := os.Stat(".smallcode"); os.IsNotExist(err) {
 		m.Model.Output = append(m.Model.Output, fmt.Sprintf("%sProject not initialized. Type %s/init%s to get started.%s", errorStyle, lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("12")).Render(""), "", resetStyle))
+	} else if data, err := os.ReadFile(".smallcode/session.json"); err == nil {
+		var state map[string]interface{}
+		if json.Unmarshal(data, &state) == nil {
+			msgs, _ := state["messages"].([]interface{})
+			if len(msgs) > 0 {
+				m.Model.PromptingForResume = true
+				m.Model.Output = append(m.Model.Output, lipgloss.NewStyle().Foreground(lipgloss.Color("13")).Bold(true).Render("   Previous session found. Resume? [y/n]"))
+			}
+		}
 	}
 
 	return m
@@ -765,7 +970,7 @@ func initProject() []string {
 
 	// 1. .env (template)
 	if _, err := os.Stat(".env"); os.IsNotExist(err) {
-		content := "OPENROUTER_API_KEY=\nMODEL=minimax/minimax-m2.5\nMAX_TOKENS=16384\n"
+		content := "OPENROUTER_API_KEY=\nMODEL=minimax/minimax-m2.5\nMAX_TOKENS=16384\nSECURITY_LEVEL=balanced\n"
 		if err := os.WriteFile(".env", []byte(content), 0644); err == nil {
 			msgs = append(msgs, "✔ Created .env template")
 		}
