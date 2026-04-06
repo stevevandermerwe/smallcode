@@ -1,6 +1,6 @@
 # 🤖 SmallCode
 
-An AI-powered code assistant that lives in your terminal. SmallCode helps you explore, understand, and modify your codebase with the help of Claude—all from a beautiful TUI interface.
+An AI-powered code assistant that lives in your terminal. SmallCode helps you explore, understand, and modify your codebase with any AI model—all from a beautiful TUI interface.
 
 Think of it as having an expert pair programmer right in your terminal that understands your entire project and follows your security rules.
 
@@ -35,7 +35,7 @@ You'll need a few tools on your machine:
 - **Go 1.26+** — Available at https://golang.org/dl/
 - **Make** — Usually comes with your system (test with `make --version`)
 - **Git** — Available at https://git-scm.com/
-- **OpenRouter API Key** — Free tier available at https://openrouter.ai/ (you'll need this to use Claude)
+- **OpenRouter API Key** — Free tier available at https://openrouter.ai/ (you'll need this to use AI models)
 
 ### Installation & Setup
 
