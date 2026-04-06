@@ -14,6 +14,7 @@ var (
 	MODEL          string
 	MAX_TOKENS     int
 	YOLO           bool
+	BASH_TIMEOUT   int // seconds
 )
 
 func LoadDotenv(path string) {
@@ -57,6 +58,14 @@ func Init() {
 	MAX_TOKENS, _ = strconv.Atoi(maxTokensStr)
 	if MAX_TOKENS == 0 {
 		MAX_TOKENS = 16384
+	}
+
+	BASH_TIMEOUT = 30 // default 30 seconds
+	timeoutStr := os.Getenv("BASH_TIMEOUT")
+	if timeoutStr != "" {
+		if val, err := strconv.Atoi(timeoutStr); err == nil && val > 0 {
+			BASH_TIMEOUT = val
+		}
 	}
 }
 

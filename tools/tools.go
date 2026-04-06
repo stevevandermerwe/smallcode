@@ -267,7 +267,8 @@ func Grep(args map[string]interface{}) string {
 
 func Bash(args map[string]interface{}) string {
 	cmdStr, _ := args["cmd"].(string)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	timeout := time.Duration(config.BASH_TIMEOUT) * time.Second
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 
 	cwd, _ := os.Getwd()
@@ -311,7 +312,7 @@ func Bash(args map[string]interface{}) string {
 
 	err := cmd.Wait()
 	if ctx.Err() == context.DeadlineExceeded {
-		outBuf.WriteString("\n(timed out after 30s)")
+		outBuf.WriteString(fmt.Sprintf("\n(timed out after %ds)", config.BASH_TIMEOUT))
 	} else if err != nil {
 		outBuf.WriteString(fmt.Sprintf("\nexit status: %v", err))
 	}
